@@ -2,6 +2,13 @@
 
 Ideas that came up while building v1 and were deliberately not built, because they're outside the v1 brief. One line each. Whether any of them happen is Prince's call.
 
+## Depth tiers (strategic, parked in v1.3)
+
+- **Tiers:** free gets Balanced, the default; paid gets Balanced + Deep dive + Exam mode.
+- **Deep dive:** a different prompt that writes what / why / how for every concept, about 60–80 cards and 20–30 MCQs for a 70-page unit.
+- **Exam mode:** writes long-answer and past-paper-style questions.
+- **Status:** both are paid-tier differentiators. Don't build until Prince greenlights the paid-tier design.
+
 ## Engine quality (most relevant if v1's output falls short)
 
 - Grounding check: a second, cheap model pass that checks each card against the page it cites and drops anything the page doesn't support.
@@ -9,7 +16,7 @@ Ideas that came up while building v1 and were deliberately not built, because th
 - Thumbs up/down on individual cards and questions, to collect real quality data from testers.
 - A small evaluation set (a few real LPU PDFs plus a scoring checklist) to compare models and prompt changes side by side.
 - Read diagrams and image-only slides with a vision model instead of skipping them.
-- Smarter dedupe across chunks (meaning-based, not just identical question text).
+- Meaning-based dedupe across the whole deck (e.g. embeddings). v1.3 matches reworded questions and shows each call the previous run's pages, but a recap at the end of a long unit can still repeat early material.
 - Prompt caching, or calling Anthropic directly, to cut cost once the model is settled.
 - Show cards as soon as the first chunk finishes, instead of waiting for the whole set.
 

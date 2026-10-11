@@ -72,12 +72,12 @@ Everything runs at the same time, so the whole set takes about as long as the sl
 
 **How many items:** Based on the amount of text, with a minimum per page so sparse decks still get decent coverage:
 - Flashcards: the larger of characters ÷ 650 and pages × 0.6, capped between 8 and 90.
-- MCQs: the larger of characters ÷ 2000 and pages × 0.22, capped between 4 and 30.
+- MCQs: the larger of characters ÷ 2000 and pages × 0.22, capped between 4 and 30. *(Changed in v1.3: a third of the flashcards, at least 12 on a 10+ page deck. See "v1.3: prompt tuning".)*
 
 A 70-page deck comes out at roughly 40–75 flashcards and 15–25 MCQs, in line with the brief. Each run gets its share in proportion to its text. The prompt says to write fewer if the pages are thin ("never pad") and allows up to a third more if they're dense.
 
 **Assembly:**
-- Cards with an identical question from different runs are dropped as duplicates.
+- Cards with an identical question from different runs are dropped as duplicates. *(v1.3: "identical" now ignores wording, and each run also sees the run before it.)*
 - Summary sections that straddle a run boundary (the same heading at the end of one part and the start of the next, including "(contd.)" variants) are merged into one.
 - Items stay in slide order.
 
@@ -91,7 +91,7 @@ The prompts live in `lib/prompts.ts`: one system prompt for flashcards and MCQs,
   - *One interpretation to flag:* a card may ask for a short named list ("Name the five process states") when the list itself is what students memorize. That's one idea, and it matches how LPU exams ask "list the…" questions. The prompt also asks for a separate card for each item when the slides explain it. "What is X and how does it differ from Y?" is always split.
 - **MCQs.** The model writes the correct option and exactly 3 distractors separately, and the server shuffles them. Models tend to put the right answer in the same positions, and writing "correct" separately also avoids answer-index mistakes. Distractors must be plausible: sibling concepts and common confusions from the same slides, matched in length and style. "All of the above"-type options are banned (and filtered out in code), because shuffling breaks them. Worked numbers must come from the slides; the model doesn't invent new calculations. Each question gets a one-line "why".
 - **Every item** carries a `topic` (the slide heading) and the `pages` it came from. The pages appear in the UI as "p. 12" so Prince can check any item against the PDF.
-- **Summary.** Topic headings follow the slides' order and wording, with consecutive slides merged. Each section has 2–6 bullets under 25 words each, with at most one **bold** key term per bullet and no other formatting.
+- **Summary.** Topic headings follow the slides' order and wording, with consecutive slides merged. Each section has 2–6 bullets under 25 words each, with at most one **bold** key term per bullet and no other formatting. *(v1.3: a list section gets one bullet per item, however many.)*
 
 ## Structured output and failure handling
 
@@ -440,3 +440,95 @@ There's no AI/ML API key in the build environment, so **AI/ML API is proven only
   - **Share link:** copies without the slide text, and says so.
   - **Reset:** clears it.
 - **Regression:** the full v1 UI flow and the v1.1 share flow still pass. Lint, typecheck and the production build pass.
+
+## v1.3: prompt tuning after the IoT unit test
+
+Prince ran a real 33-page IoT unit through v1.2 (Haiku 5.5 on AI/ML API, about $0.01). Grounding, coverage and chunking held up. The shape and depth of the items didn't:
+- duplicate cards from recap slides;
+- trivia from examples;
+- "who made it" cards instead of "what is it" cards;
+- 7 MCQs;
+- a "Seven Characteristics" summary section that listed six;
+- "1. Interconnectivity"-style topic labels.
+
+Each fix below says what the rule was, what it is now, and why.
+
+### 1. Recap slides don't get new cards
+- **Was:** "No duplicates or near-duplicates."
+- **Now:** a new "Rule 3: Teach concepts, not trivia" in `CARDS_SYSTEM`. Each concept is taught once, from the first slide that teaches it. A later slide that restates earlier material gets no new items for those concepts, whatever its title. That includes a summary, recap or overview, or a second list of the same concepts under slightly different names. Only what it adds gets an item.
+- **Also now, in code (`lib/generate.ts`):** each card call after the first gets the previous run's pages as read-only context. Any item citing only those context pages is dropped.
+- **Why the code change was needed:** on the real slides the duplicates came from p.17. Page 17 starts the second run (pp.17–33), so its call never saw pp.8–14 and couldn't know Heterogeneity, Scalability and Security were already taught. No prompt rule can fix a duplicate the model can't see.
+- **Scope note:** this is the one change that goes past "prompts only". The ~6k-character runs are unchanged; each call after the first also reads the run before it. That adds about one run's worth of input tokens to each call after the first.
+- **Considered instead:**
+  - *Outline of the whole deck:* rejected because the extracted headings are unreliable (on these slides the heading comes out at the bottom of the page).
+  - *A second model pass to dedupe:* rejected because it's a new model call, which the brief rules out.
+- **Backstop in `lib/normalize.ts`:** `dedupeFlashcards` now matches questions that differ only in filler words.
+  - "What is heterogeneity in IoT?" and "What does heterogeneity mean in IoT?" match.
+  - "What is MQTT?" and "What is MQTT used for?" don't, and neither do "What is TCP?" and "What does TCP stand for?".
+  - On three earlier real Haiku sets (76 cards) it dropped nothing. It wouldn't have caught Prince's pairs on its own, because those were worded differently; the context above is what fixes them.
+
+### 2. Examples are context, not facts
+- **Was:** nothing; any text could become a card.
+- **Now:** examples illustrate a concept and are never asked about in their own right. This covers whole example slides ("Example: Smart Factory", "Real-World Example") and "Example:" / "e.g." lines inside a teaching slide. The item is about the concept. An example may be the scenario of an MCQ that asks which concept it shows. Worked calculations are exempt: their method and result are still fair game.
+- **Why:** on Prince's slides most example trivia came from "Example:" bullets inside the characteristic slides, e.g. "Example of interconnectivity given on the slide?". The fix now turns the smart-thermostat example into "which characteristic does this illustrate?", which tests the concept.
+
+### 3. Named things get a "what is it" card
+- **Was:** nothing specific.
+- **Now:** every named thing gets its own flashcard asking what it is or what it's for, even if an MCQ also covers it. Named things are protocols, standards, algorithms, models, frameworks, tools, layers and named characteristics. Who made it, when, its version or its standard number can only be extra cards. When the item count is tight, trivia is cut first.
+- **Why:** v1.2 gave ZigBee, CoAP and MQTT only "which IEEE standard / which organization / which model" cards. The first v1.3 attempt still lost CoAP and MQTT's definitions, because the model rationed cards against the target. Hence the "cut trivia first" line.
+
+### 4. More MCQs
+- **Was:** the larger of characters ÷ 2000 and pages × 0.22, capped between 4 and 30. That gave 7 on the IoT unit.
+- **Now:** a third of the flashcard target, at least 12 once a deck has 10 pages of text, capped at 30. Flashcard scaling is unchanged.
+- **Why 12, not 10:** Haiku lands at or just under the target (7 asked → 7 delivered, twice), and normalization can drop a malformed question. Targeting 12 makes "at least 10" reliable.
+- **Effect:** a 70-page deck lands at about 14–27 MCQs, so long units barely change; short ones get a real quiz.
+
+### 5. Summary lists keep every item
+- **Was:** "Each section has 2 to 6 bullet points."
+- **Now:**
+  - A list section gets one bullet per item, however many that is.
+  - A list stays in one section.
+  - If the heading states or implies a count, the item bullets match it.
+  - One item's description is never folded into another's bullet.
+  - Recap slides add no new bullets.
+- **Why:** the 6-bullet cap was the root cause of "Seven Characteristics" listing six with the seventh attached to the Security bullet.
+
+### 6. Clean topic labels
+- **Was:** the topic was taken as the model wrote it.
+- **Now:** `normalize.ts` strips a leading "1. " or "2) " (also after a colon: "Characteristics: 2. Heterogeneity"), and the prompt asks for no list numbering. Section numbers like "2.4" and names like "802.15.4" are left alone.
+- **Why:** on these slides the heading ("1. Interconnectivity") comes out at the bottom of the page text with its number attached.
+
+### 7. One MCQ that tells parallel items apart (experimental)
+- **Was:** nothing.
+- **Now:** when consecutive slides cover a set of parallel items (protocols, algorithms, layers, states…), at least one MCQ asks "given this need or property, which one fits?", with the other items as distractors.
+- **Result:** mostly works, but not reliably. Four of five real runs produced 3–4 "Which protocol…?" questions (pub/sub → MQTT, constrained devices → CoAP, long range → LoRaWAN), with the other protocols as distractors. One run produced only one; it was an intermediate run where p.17 duplicates used up the second call's budget. The questions turn a property that one slide states into "which item has it". That isn't a cross-slide comparison, but these slides don't make one either. I'm keeping it: when it fires the questions are good, and when it doesn't nothing breaks.
+
+### Cost
+About $0.008 per run on the IoT unit, against about $0.005 on the same text with v1.2 (from the server logs). The increase comes from the longer prompt, 5 more MCQs and the earlier-pages context.
+
+## How v1.3 was tested
+
+**Real model:** Haiku 5.5 on AI/ML API, through a Vercel preview of this branch.
+- **Inputs:**
+  - Prince's "UNIT 1.pdf" slide text, taken from his "Copy for review" paste and sent exactly as the model saw it;
+  - a synthetic 33-page IoT deck built to the same pattern.
+- **Baselines:** the v1.2 runs (Prince's, and two of mine on the synthetic deck) reproduced the problems:
+  - 7 MCQs;
+  - trivia from the Smart Factory slide;
+  - "Which IEEE standard is ZigBee based on?" and no protocol definitions.
+- **Final prompts, Prince's slides, two runs:**
+
+| Check | Run 1 | Run 2 |
+|---|---|---|
+| Cards from the pp.15–17 recap | none | none from p.17; two list cards from the untitled p.15 recap ("which four characteristics…", "design considerations"), neither a repeat of a single characteristic |
+| Example trivia | none | none |
+| "What is X?" cards for ZigBee / CoAP / MQTT | all three, plus LoRaWAN | all three, plus Dotdot |
+| MCQs | 12 | 12 |
+| "Seven Characteristics" section | 7 bullets | 7 bullets |
+| Numbered topic labels | none | none |
+| Answers checked against the slide text | nothing invented | nothing invented |
+
+- **Earlier runs:** two more on the intermediate prompts are how fixes 1 and 3 were tightened. They showed p.17 still producing duplicates without the earlier-pages context, and CoAP/MQTT losing their definition cards.
+- **Not reliable yet:** run-to-run variance remains. The untitled p.15 recap sometimes gets one or two list-style cards.
+- **Regression:** the mocked UI flow, swipe tests and keyboard tests pass. Lint, typecheck and the production build pass.
+
