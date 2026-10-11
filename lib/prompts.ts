@@ -86,11 +86,21 @@ export function cardsUserPrompt(opts: Range & {
   flashcards: number;
   mcqs: number;
   slides: string;
+  /** The pages just before these, so recap slides here can be recognized as recaps. */
+  earlierSlides?: string;
 }): string {
+  const earlier = opts.earlierSlides
+    ? `
+
+For context only, here are the pages just before yours. They already have their own items: write nothing for them, and don't repeat a concept they teach just because one of your pages restates it.
+<earlier_slides>
+${opts.earlierSlides}
+</earlier_slides>`
+    : "";
   return `File: ${opts.fileName}
 These are pages ${opts.first}-${opts.last} of a ${opts.pageCount}-page unit. Other pages are handled separately; write items only for these pages.
 
-Aim for about ${opts.flashcards} flashcards and ${opts.mcqs} MCQs. If these pages have less teachable content, write fewer: never pad. If they are dense, you may write up to a third more.
+Aim for about ${opts.flashcards} flashcards and ${opts.mcqs} MCQs. If these pages have less teachable content, write fewer: never pad. If they are dense, you may write up to a third more.${earlier}
 
 <slides>
 ${opts.slides}

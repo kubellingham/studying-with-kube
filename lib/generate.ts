@@ -58,7 +58,7 @@ export async function generateStudySet({ fileName, pdf, signal, emit }: Generate
     }
   };
 
-  const cardJobs = cardChunks.map((chunk) =>
+  const cardJobs = cardChunks.map((chunk, i) =>
     track(
       callModelJson({
         label: `cards p${chunk.first}-${chunk.last}`,
@@ -71,6 +71,7 @@ export async function generateStudySet({ fileName, pdf, signal, emit }: Generate
           flashcards: share(targets.flashcards, chunk, pdf.totalChars, 2),
           mcqs: share(targets.mcqs, chunk, pdf.totalChars, 1),
           slides: formatPages(chunk.pages),
+          earlierSlides: i > 0 ? formatPages(cardChunks[i - 1].pages) : undefined,
         }),
         schemaName: "study_items",
         schema: CARDS_SCHEMA,
@@ -78,7 +79,7 @@ export async function generateStudySet({ fileName, pdf, signal, emit }: Generate
         signal: callSignal,
       }).then((r) => {
         usages.push(r.usage ?? {});
-        return normalizeCards(r.data, allowedPages);
+        return onlyFromChunk(normalizeCards(r.data, allowedPages), chunk);
       }),
     ),
   );
@@ -183,6 +184,15 @@ function itemTargets(pdf: ExtractedPdf) {
     flashcards,
     mcqs: clamp(Math.round(flashcards / 3), pages >= 10 ? 12 : 4, 30),
   };
+}
+
+/** Drops items that cite only the earlier pages given as context (those are another call's job). */
+function onlyFromChunk<F extends { pages: number[] }, M extends { pages: number[] }>(
+  items: { flashcards: F[]; mcqs: M[] },
+  chunk: PageChunk,
+) {
+  const ours = (item: { pages: number[] }) => item.pages.length === 0 || item.pages.some((p) => p >= chunk.first);
+  return { flashcards: items.flashcards.filter(ours), mcqs: items.mcqs.filter(ours) };
 }
 
 function share(total: number, chunk: PageChunk, totalChars: number, min: number): number {
