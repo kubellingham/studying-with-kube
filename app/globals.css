@@ -1,0 +1,87 @@
+@import "tailwindcss";
+
+:root {
+  --bg: #f6f5f1;
+  --surface: #ffffff;
+  --surface-2: #f0efea;
+  --ink: #1c1c21;
+  --muted: #6a6a74;
+  --line: #e2e0d9;
+  --accent: #4338ca;
+  --accent-soft: #e8e7fb;
+  --good: #15803d;
+  --good-soft: #e3f4e8;
+  --bad: #be123c;
+  --bad-soft: #fbe6eb;
+  --warn-soft: #fdf3dc;
+  --warn-ink: #7a4b00;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #111114;
+    --surface: #1a1a1f;
+    --surface-2: #23232a;
+    --ink: #ececf1;
+    --muted: #9d9daa;
+    --line: #2e2e37;
+    --accent: #8b93ff;
+    --accent-soft: #262747;
+    --good: #4ade80;
+    --good-soft: #15291d;
+    --bad: #fb7185;
+    --bad-soft: #33161e;
+    --warn-soft: #2d2512;
+    --warn-ink: #f2c46b;
+  }
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-good: var(--good);
+  --color-good-soft: var(--good-soft);
+  --color-bad: var(--bad);
+  --color-bad-soft: var(--bad-soft);
+  --color-warn-soft: var(--warn-soft);
+  --color-warn-ink: var(--warn-ink);
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+}
+
+/* Flip card: both faces share one grid cell, so the card is as tall as its longer face. */
+.flip {
+  perspective: 1400px;
+}
+.flip-inner {
+  display: grid;
+  transform-style: preserve-3d;
+  transition: transform 0.45s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.flip-inner.is-flipped {
+  transform: rotateY(180deg);
+}
+.flip-face {
+  grid-area: 1 / 1;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+.flip-back {
+  transform: rotateY(180deg);
+}
+@media (prefers-reduced-motion: reduce) {
+  .flip-inner {
+    transition: none;
+  }
+}
