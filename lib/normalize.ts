@@ -121,15 +121,38 @@ function headingKey(heading: string): string {
     .trim();
 }
 
-/** Drops cards whose question is the same as an earlier card's (chunks can overlap in topic). */
+/**
+ * Drops cards that ask the same question as an earlier card (chunks can overlap
+ * in topic, e.g. a recap slide in one chunk restating slides in another).
+ * "Same" ignores wording: "What is heterogeneity in IoT?" and "What does
+ * heterogeneity mean in IoT?" match, but "What is MQTT?" and "What is MQTT
+ * used for?" don't. Earlier cards win, so the first slide that teaches it.
+ */
 export function dedupeFlashcards<T extends { front: string }>(cards: T[]): T[] {
   const seen = new Set<string>();
   return cards.filter((card) => {
-    const key = card.front.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+    const key = questionKey(card.front);
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
   });
+}
+
+const QUESTION_FILLER = new Set(
+  ("a an the of in on for to by with as at from and or its it this that these those is are was were be been " +
+    "does do did what which who whom whose when where why how mean means meaning define definition describe " +
+    "explain term called refer refers name give list").split(" "),
+);
+
+function questionKey(front: string): string {
+  const words = front.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  const key = words
+    .split(" ")
+    .filter((w) => w && !QUESTION_FILLER.has(w))
+    .map((w) => (w.length > 3 && w.endsWith("s") && !w.endsWith("ss") ? w.slice(0, -1) : w))
+    .sort()
+    .join(" ");
+  return key || words; // a question that is all filler words only matches itself
 }
 
 function shuffle<T>(items: T[]): T[] {
