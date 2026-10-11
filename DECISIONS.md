@@ -184,14 +184,13 @@ There's no test suite. It wasn't required, and the open question is output quali
 
 **Chose:**
 - A Vercel project, `studying-with-kube` (team "kubellingham's projects"), linked to the GitHub repo, so every push to a branch deploys automatically.
-- The first push (branch `v1.1-deploy-share`) went out as the project's production deployment. That gave it the short URL **https://studying-with-kube.vercel.app**.
+- The project's first deployment (from branch `v1.1-deploy-share`) went out as Production, which gave it the short URL **https://studying-with-kube.vercel.app**.
+- Vercel's production branch is `main`, so later pushes to this branch become previews. Once the PRs are merged, pushes to `main` update the short URL.
 - Functions run in `iad1` (US East), close to OpenRouter and the model providers.
 
 **Vercel's own login wall is switched off.** Vercel puts its "Deployment Protection" (Vercel Authentication) on new projects by default. It only lets in people logged into Vercel with access to the team, which would block Prince's phone and anyone he shares with. The app's own password gate (next section) replaces it.
 
 **Considered:** Vercel's built-in Password Protection. It's a paid add-on, and the app-level gate does the same job for free.
-
-**Note for later:** after both PRs are merged, check **Settings → Git → Production Branch** is `main`, so the short URL keeps following `main`.
 
 ## Access password: a cookie gate in `proxy.ts`
 

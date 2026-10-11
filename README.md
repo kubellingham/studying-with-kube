@@ -14,7 +14,9 @@ This build tests one question: is the output good enough to cram from? It has no
 
 **URL:** https://studying-with-kube.vercel.app
 
-It's the Vercel project `studying-with-kube` in the "kubellingham's projects" team, deployed from the `v1.1-deploy-share` branch. Every push to a branch builds a new deployment automatically.
+It's the Vercel project `studying-with-kube` in the "kubellingham's projects" team, linked to this GitHub repo.
+- **The short URL above** serves the deployment marked **Production**. For now that's the first build of the `v1.1-deploy-share` branch. Once the PRs are merged, every push to `main` updates it.
+- **Every other push** gets its own preview deployment, e.g. https://studying-with-kube-git-v11-deploy-share-kubellinghams-projects.vercel.app for this branch. Previews use the same password and share the same stored sets.
 
 ### The access password
 
@@ -24,7 +26,7 @@ It's the Vercel project `studying-with-kube` in the "kubellingham's projects" te
 
 **To change it:**
 1. In Vercel, open **studying-with-kube → Settings → Environment Variables** and edit `KUBE_ACCESS_PASSWORD`.
-2. Open **Deployments**, then **⋯ → Redeploy** on the latest one. Environment variables only take effect on a new deployment.
+2. Open **Deployments**, then **⋯ → Redeploy** on the one marked **Production**. Environment variables only take effect on a new deployment.
 
 Changing the password signs every device out.
 
@@ -32,7 +34,7 @@ Changing the password signs every device out.
 
 1. **Add the OpenRouter key.** Under **Settings → Environment Variables**, add `OPENROUTER_API_KEY` for Production and Preview, marked *Sensitive*. Without it, uploads fail with a message saying the key is missing.
 2. **Create the storage for share links.** Under **Storage → Create → Blob**, choose **Private** access and connect the store to `studying-with-kube` for all environments. Vercel then adds `BLOB_READ_WRITE_TOKEN` to the project by itself. Until this exists, sets still generate, but they show "Share links aren't set up on this server yet".
-3. **Redeploy** so the new variables take effect.
+3. **Redeploy** the deployment marked **Production** (Deployments → ⋯ → Redeploy) so the new variables take effect.
 
 ### Cost
 
