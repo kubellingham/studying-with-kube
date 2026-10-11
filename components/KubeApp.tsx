@@ -1,12 +1,11 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import { clearAll, emptyProgress, loadProgress, loadSet, saveProgress, saveSet, type Progress, type Tab } from "@/lib/storage";
-import type { GenerateEvent, StudySet } from "@/lib/types";
-import Flashcards from "./Flashcards";
-import Quiz from "./Quiz";
-import Summary from "./Summary";
-import { Button } from "./ui";
+import { readPdfText } from "@/lib/readPdf";
+import { clearAll, emptyProgress, loadProgress, loadSet, saveProgress, saveSet, type Progress } from "@/lib/storage";
+import type { GenerateEvent, GenerateRequest, StudySet } from "@/lib/types";
+import StudyView from "./StudyView";
+import { Brand, Button } from "./ui";
 import Uploader, { type GenerationState } from "./Uploader";
 
 const MAX_UPLOAD_MB = 20;
@@ -45,12 +44,20 @@ export default function KubeApp() {
     const controller = new AbortController();
     abortRef.current = controller;
     const startedAt = Date.now();
-    setGen({ status: "working", fileName: file.name, message: "Uploading and reading your slides…", done: 0, total: 0, startedAt });
+    setGen({ status: "working", fileName: file.name, message: "Reading your slides…", done: 0, total: 0, startedAt });
 
     try {
-      const body = new FormData();
-      body.append("file", file);
-      const res = await fetch("/api/generate", { method: "POST", body, signal: controller.signal });
+      // Only the text leaves the device, not the PDF (see lib/readPdf.ts).
+      const pages = await readPdfText(file);
+      if (controller.signal.aborted) throw new Error("Cancelled.");
+      setGen((g) => (g.status === "working" ? { ...g, message: "Sending the text to the AI…" } : g));
+      const request: GenerateRequest = { fileName: file.name, pages };
+      const res = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(request),
+        signal: controller.signal,
+      });
       if (!res.ok || !res.body) {
         const payload = await res.json().catch(() => null);
         throw new Error(payload?.error ?? `Upload failed (HTTP ${res.status}).`);
@@ -124,12 +131,6 @@ export default function KubeApp() {
     );
   }
 
-  const tabs: { id: Tab; label: string; count?: number }[] = [
-    { id: "flashcards", label: "Flashcards", count: set.flashcards.length },
-    { id: "quiz", label: "Quiz", count: set.mcqs.length },
-    { id: "summary", label: "Summary" },
-  ];
-
   return (
     <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col px-4 py-6 sm:py-8">
       <header className="flex items-center justify-between gap-3">
@@ -146,85 +147,14 @@ export default function KubeApp() {
 
       {(showUploader || gen.status !== "idle") && <div className="mt-6">{uploader}</div>}
 
-      <section className="mt-8">
-        <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">{set.title}</h1>
-        <p className="mt-1 text-sm text-muted">
-          {set.source.fileName} · {set.source.pageCount} pages · made {formatDate(set.createdAt)}
-        </p>
-        {(set.warnings.length > 0 || storageWarning) && (
-          <ul className="mt-4 space-y-1 rounded-lg bg-warn-soft px-4 py-3 text-sm text-warn-ink">
-            {storageWarning && (
-              <li>This browser wouldn&apos;t save the set, so it will be gone if you close the tab.</li>
-            )}
-            {set.warnings.map((w) => (
-              <li key={w}>{w}</li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      <nav className="mt-6 flex gap-1 border-b border-line" aria-label="Study modes">
-        {tabs.map((tab) => {
-          const active = progress.tab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => updateProgress({ tab: tab.id })}
-              aria-current={active ? "page" : undefined}
-              className={`-mb-px flex items-center gap-2 rounded-t-md border-b-2 px-4 py-2.5 text-sm font-medium transition focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent ${
-                active ? "border-accent text-ink" : "border-transparent text-muted hover:text-ink"
-              }`}
-            >
-              {tab.label}
-              {tab.count !== undefined && (
-                <span className="rounded-full bg-surface-2 px-2 py-0.5 text-xs text-muted">{tab.count}</span>
-              )}
-            </button>
-          );
-        })}
-      </nav>
-
-      <div className="mt-6 flex-1">
-        {progress.tab === "flashcards" && (
-          <Flashcards
-            cards={set.flashcards}
-            marks={progress.cardMarks}
-            index={progress.cardIndex}
-            onIndex={(cardIndex) => updateProgress({ cardIndex })}
-            onMarks={(cardMarks) => updateProgress({ cardMarks })}
-          />
-        )}
-        {progress.tab === "quiz" && (
-          <Quiz
-            mcqs={set.mcqs}
-            answers={progress.quizAnswers}
-            index={progress.quizIndex}
-            onChange={(patch) => updateProgress(patch)}
-          />
-        )}
-        {progress.tab === "summary" && <Summary title={set.title} sections={set.summary} />}
-      </div>
+      <StudyView
+        set={set}
+        progress={progress}
+        onProgress={updateProgress}
+        notices={storageWarning ? ["This browser wouldn't save the set, so it will be gone if you close the tab."] : []}
+      />
     </main>
   );
-}
-
-function Brand() {
-  return (
-    <div className="flex items-center gap-2 text-sm font-semibold tracking-tight">
-      <span className="grid h-7 w-7 place-items-center rounded-lg bg-accent text-white dark:text-[#111114]" aria-hidden>
-        K
-      </span>
-      StudyingKube
-    </div>
-  );
-}
-
-function formatDate(iso: string): string {
-  const date = new Date(iso);
-  return Number.isNaN(date.getTime())
-    ? ""
-    : date.toLocaleString(undefined, { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
 }
 
 /** Parses the newline-delimited JSON stream from /api/generate. */

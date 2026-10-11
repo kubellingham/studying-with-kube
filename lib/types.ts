@@ -47,11 +47,19 @@ export interface StudySet {
   mcqs: Mcq[];
   /** Human-readable notes about partial failures, shown above the study UI. */
   warnings: string[];
+  /** Set when the server stored a copy for sharing: the set opens at /s/<shareId>. */
+  shareId?: string;
+}
+
+/** Body of POST /api/generate: the raw text of each PDF page, read in the browser. */
+export interface GenerateRequest {
+  fileName: string;
+  pages: string[];
 }
 
 /** Events streamed by POST /api/generate, one JSON object per line. */
 export type GenerateEvent =
   | { type: "stage"; message: string }
   | { type: "progress"; done: number; total: number }
-  | { type: "done"; set: StudySet }
+  | { type: "done"; set: StudySet; shareId: string | null }
   | { type: "error"; message: string };

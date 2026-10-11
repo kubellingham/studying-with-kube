@@ -1,59 +1,51 @@
 import type { NextRequest } from "next/server";
 import { LIMITS, serverConfig } from "@/lib/config";
 import { generateStudySet } from "@/lib/generate";
-import { extractSlides, PdfReadError, type ExtractedPdf } from "@/lib/pdf";
+import { cleanSlides } from "@/lib/pdf";
 import { acquireGeneration, clientIp } from "@/lib/rateLimit";
-import type { GenerateEvent } from "@/lib/types";
+import { saveSharedSet, sharingEnabled } from "@/lib/shareStore";
+import type { GenerateEvent, GenerateRequest } from "@/lib/types";
 
 // Generation is ~30s of parallel model calls; give it headroom.
 export const maxDuration = 120;
 
-// POST multipart/form-data with a "file" field (the PDF).
-// Validation errors come back as JSON with a 4xx/5xx status. Once generation
-// starts, the response is a stream of newline-delimited GenerateEvent JSON.
+// POST JSON { fileName, pages: string[] }: the raw text of each PDF page,
+// extracted in the browser (lib/readPdf.ts). Validation errors come back as
+// JSON with a 4xx/5xx status. Once generation starts, the response is a
+// stream of newline-delimited GenerateEvent JSON.
 //
-// Privacy: the PDF only ever lives in this request's memory. Nothing is
-// written to disk, cached, or logged; it is gone when the request ends.
+// Privacy: the PDF never reaches the server, and its text only lives in this
+// request's memory; it is never written anywhere or logged. What is stored
+// (when sharing is configured) is the generated study set, for its share link.
 export async function POST(req: NextRequest) {
   if (!serverConfig().apiKey) {
-    return fail(500, "The server has no OPENROUTER_API_KEY. Add it to .env.local and restart (see README).");
+    return fail(500, "The server has no OPENROUTER_API_KEY. Add it to the environment and restart or redeploy (see README).");
   }
 
   const declaredSize = Number(req.headers.get("content-length") ?? 0);
-  if (declaredSize > LIMITS.maxFileBytes + 1024 * 1024) return tooBig();
+  if (declaredSize > LIMITS.maxBodyBytes) return tooMuchText();
 
-  let file: FormDataEntryValue | null;
+  let body: GenerateRequest;
   try {
-    file = (await req.formData()).get("file");
+    const raw = await req.text();
+    if (raw.length > LIMITS.maxBodyBytes) return tooMuchText();
+    body = JSON.parse(raw);
   } catch {
-    return fail(400, "Expected a PDF upload.");
+    return fail(400, "Expected the text of a PDF.");
   }
-  if (!(file instanceof File) || file.size === 0) return fail(400, "Expected a PDF upload.");
-  if (file.size > LIMITS.maxFileBytes) return tooBig();
-
-  const bytes = new Uint8Array(await file.arrayBuffer());
-  if (new TextDecoder().decode(bytes.subarray(0, 1024)).indexOf("%PDF-") === -1) {
-    return fail(415, "That file isn't a PDF. v1 only reads PDF lecture slides.");
+  const pages = Array.isArray(body?.pages) ? body.pages : null;
+  if (!pages || pages.length === 0 || !pages.every((p) => typeof p === "string")) {
+    return fail(400, "Expected the text of a PDF.");
   }
 
-  let pdf: ExtractedPdf;
-  try {
-    pdf = await extractSlides(bytes);
-  } catch (err) {
-    if (err instanceof PdfReadError) return fail(422, err.message);
-    console.error("[kube] PDF extraction failed:", (err as Error).message);
-    return fail(422, "Couldn't read this PDF.");
+  if (pages.length > LIMITS.maxPages) {
+    return fail(413, `This PDF has ${pages.length} pages. v1 handles one unit at a time, up to ${LIMITS.maxPages} pages. Split it and upload one part.`);
   }
-
-  if (pdf.pageCount > LIMITS.maxPages) {
-    return fail(413, `This PDF has ${pdf.pageCount} pages. v1 handles one unit at a time, up to ${LIMITS.maxPages} pages. Split it and upload one part.`);
-  }
+  const pdf = cleanSlides(pages);
   if (pdf.totalChars < LIMITS.minChars) {
     return fail(422, "This PDF has (almost) no selectable text. It looks scanned or image-only, and v1 can only read text-based PDFs.");
   }
-  if (pdf.totalChars > LIMITS.maxChars) {
-    return fail(413, "This PDF has more text than one unit of slides usually does. Split it and upload one part.");
-  }
+  if (pdf.totalChars > LIMITS.maxChars) return tooMuchText();
 
   // Rate limit only once we know we're about to spend money.
   const gate = acquireGeneration(clientIp(req.headers));
@@ -61,7 +53,7 @@ export async function POST(req: NextRequest) {
     return Response.json({ error: gate.message }, { status: 429, headers: { "Retry-After": String(gate.retryAfterSec) } });
   }
 
-  const fileName = file.name || "slides.pdf";
+  const fileName = (typeof body.fileName === "string" && body.fileName.trim().slice(0, 200)) || "slides.pdf";
   const encoder = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -74,7 +66,17 @@ export async function POST(req: NextRequest) {
       };
       try {
         const set = await generateStudySet({ fileName, pdf, signal: req.signal, emit });
-        emit({ type: "done", set });
+        let shareId: string | null = null;
+        if (sharingEnabled()) {
+          try {
+            shareId = await saveSharedSet(set);
+            set.shareId = shareId;
+          } catch (err) {
+            console.error("[kube] couldn't store set for sharing:", (err as Error).message);
+            set.warnings.push("Couldn't create a share link for this set. Everything else works.");
+          }
+        }
+        emit({ type: "done", set, shareId });
       } catch (err) {
         if (!req.signal.aborted) {
           console.error("[kube] generation failed:", (err as Error).message);
@@ -104,8 +106,8 @@ function fail(status: number, message: string) {
   return Response.json({ error: message }, { status });
 }
 
-function tooBig() {
-  return fail(413, `That file is over ${LIMITS.maxFileBytes / (1024 * 1024)} MB. v1 takes one unit of slides at a time.`);
+function tooMuchText() {
+  return fail(413, "This PDF has more text than one unit of slides usually does. Split it and upload one part.");
 }
 
 function userMessage(err: unknown): string {

@@ -6,6 +6,8 @@ import { STUDY_SET_VERSION, type StudySet } from "./types";
 
 const SET_KEY = "kube:v1:set";
 const PROGRESS_KEY = "kube:v1:progress";
+/** Progress on a set opened from a share link (/s/<id>), kept apart from the home page's. */
+export const SHARED_PROGRESS_KEY = "kube:v1:shared-progress";
 
 export type CardMark = "know" | "dont";
 export type Tab = "flashcards" | "quiz" | "summary";
@@ -38,8 +40,8 @@ export function loadSet(): StudySet | null {
   return set;
 }
 
-export function loadProgress(set: StudySet): Progress {
-  const saved = read<Progress>(PROGRESS_KEY);
+export function loadProgress(set: StudySet, key = PROGRESS_KEY): Progress {
+  const saved = read<Progress>(key);
   if (!saved || saved.setId !== set.id) return emptyProgress(set.id);
   return { ...emptyProgress(set.id), ...saved };
 }
@@ -49,8 +51,8 @@ export function saveSet(set: StudySet): boolean {
   return write(SET_KEY, set);
 }
 
-export function saveProgress(progress: Progress): void {
-  write(PROGRESS_KEY, progress);
+export function saveProgress(progress: Progress, key = PROGRESS_KEY): void {
+  write(key, progress);
 }
 
 export function clearAll(): void {

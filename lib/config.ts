@@ -1,8 +1,13 @@
 // Server-side limits and settings. Everything that costs money is bounded here.
 
 export const LIMITS = {
-  /** Upload size cap. The brief targets ~15 MB; a little headroom for image-heavy decks. */
+  /** PDF size cap, checked in the browser (the PDF itself is never uploaded). */
   maxFileBytes: 20 * 1024 * 1024,
+  /**
+   * Cap on the JSON of extracted page text sent to /api/generate. Comfortably
+   * above 200k characters of text, well under Vercel's 4.5 MB request limit.
+   */
+  maxBodyBytes: 3 * 1024 * 1024,
   /** The brief targets ~70 pages; anything far beyond that is not a single unit. */
   maxPages: 100,
   /** Extracted-text cap (~50k tokens). Bounds the input cost of one generation. */

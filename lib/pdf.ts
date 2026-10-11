@@ -1,5 +1,3 @@
-import { extractText, getDocumentProxy } from "unpdf";
-
 export interface SlidePage {
   /** 1-based page number in the PDF. */
   page: number;
@@ -13,44 +11,27 @@ export interface ExtractedPdf {
   totalChars: number;
 }
 
-export class PdfReadError extends Error {}
-
 /**
- * Pulls the text out of every page, then strips the noise lecture slides
- * repeat on every page (university name, course code, slide numbers) so the
- * model spends its attention on content.
+ * Takes the raw text of every page (extracted in the browser, see
+ * lib/readPdf.ts) and strips the noise lecture slides repeat on every page
+ * (university name, course code, slide numbers) so the model spends its
+ * attention on content.
  */
-export async function extractSlides(bytes: Uint8Array): Promise<ExtractedPdf> {
-  let pdf: Awaited<ReturnType<typeof getDocumentProxy>>;
-  try {
-    pdf = await getDocumentProxy(bytes);
-  } catch (err) {
-    const name = (err as { name?: string })?.name ?? "";
-    if (name === "PasswordException") {
-      throw new PdfReadError("This PDF is password-protected. Remove the password and upload it again.");
-    }
-    throw new PdfReadError("Couldn't open this file as a PDF. It may be damaged.");
-  }
+export function cleanSlides(rawPageTexts: string[]): ExtractedPdf {
+  const rawPages = rawPageTexts.map(splitLines);
+  const boilerplate = findBoilerplate(rawPages);
 
-  try {
-    const { totalPages, text } = await extractText(pdf, { mergePages: false });
-    const rawPages = text.map(splitLines);
-    const boilerplate = findBoilerplate(rawPages);
+  const pages: SlidePage[] = [];
+  rawPages.forEach((lines, i) => {
+    const kept = lines.filter((line) => !boilerplate.has(boilerplateKey(line)) && !isPageNumber(line));
+    if (kept.length > 0) pages.push({ page: i + 1, text: kept.join("\n") });
+  });
 
-    const pages: SlidePage[] = [];
-    rawPages.forEach((lines, i) => {
-      const kept = lines.filter((line) => !boilerplate.has(boilerplateKey(line)) && !isPageNumber(line));
-      if (kept.length > 0) pages.push({ page: i + 1, text: kept.join("\n") });
-    });
-
-    return {
-      pageCount: totalPages,
-      pages,
-      totalChars: pages.reduce((n, p) => n + p.text.length, 0),
-    };
-  } finally {
-    await pdf.loadingTask.destroy().catch(() => {});
-  }
+  return {
+    pageCount: rawPageTexts.length,
+    pages,
+    totalChars: pages.reduce((n, p) => n + p.text.length, 0),
+  };
 }
 
 function splitLines(pageText: string): string[] {

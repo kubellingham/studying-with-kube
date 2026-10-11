@@ -24,6 +24,17 @@ export function Button({
   );
 }
 
+export function Brand() {
+  return (
+    <div className="flex items-center gap-2 text-sm font-semibold tracking-tight">
+      <span className="grid h-7 w-7 place-items-center rounded-lg bg-accent text-white dark:text-[#111114]" aria-hidden>
+        K
+      </span>
+      StudyingKube
+    </div>
+  );
+}
+
 export function Kbd({ children }: { children: ReactNode }) {
   return (
     <kbd className="rounded border border-line bg-surface px-1.5 py-0.5 font-mono text-[11px] text-muted">
