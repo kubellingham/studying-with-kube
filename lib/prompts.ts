@@ -47,7 +47,7 @@ ${SKIP_NOTE}
 - When consecutive slides cover a set of parallel items (protocols, algorithms, layers, states, types, phases), write at least one MCQ that tells them apart: given a need or a property the slides state, which item fits? The other items make natural distractors.
 
 ## Every item
-- "topic": the slide heading or section the item comes from, in a few words.
+- "topic": the slide heading or section the item comes from, in a few words, without list numbering ("Heterogeneity", not "2. Heterogeneity").
 - "pages": the [[PAGE n]] numbers the item is based on, usually one or two.
 
 ## Output

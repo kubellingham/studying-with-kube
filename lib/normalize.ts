@@ -12,6 +12,11 @@ function cleanText(value: unknown, maxChars: number): string | null {
   return text;
 }
 
+/** Topic badge text: the slide's list numbering ("2. Heterogeneity") is noise in the UI. */
+function cleanTopic(value: unknown): string {
+  return (cleanText(value, 120) ?? "").replace(/(^|:\s)\d{1,2}[.)]\s+/, "$1");
+}
+
 function cleanPages(value: unknown, allowed: Set<number>): number[] {
   if (!Array.isArray(value)) return [];
   const pages = value
@@ -38,7 +43,7 @@ export function normalizeCards(
     const back = cleanText(item.back, 400);
     if (!front || !back) continue;
     flashcards.push({
-      topic: cleanText(item.topic, 120) ?? "",
+      topic: cleanTopic(item.topic),
       front,
       back,
       pages: cleanPages(item.pages, allowedPages),
@@ -61,7 +66,7 @@ export function normalizeCards(
     // Models favour certain answer positions; shuffle so the answer isn't guessable.
     const order = shuffle([0, 1, 2, 3]);
     mcqs.push({
-      topic: cleanText(item.topic, 120) ?? "",
+      topic: cleanTopic(item.topic),
       question,
       options: order.map((i) => options[i]),
       answerIndex: order.indexOf(0),
