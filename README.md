@@ -16,7 +16,8 @@ This build tests one question: is the output good enough to cram from? It has no
 
 It's the Vercel project `studying-with-kube` in the "kubellingham's projects" team, linked to this GitHub repo.
 - **The short URL above** serves the deployment marked **Production**. For now that's the first build of the `v1.1-deploy-share` branch. Once the PRs are merged, every push to `main` updates it.
-- **Every other push** gets its own preview deployment, e.g. https://studying-with-kube-git-v11-deploy-share-kubellinghams-projects.vercel.app for this branch. Previews use the same password and share the same stored sets.
+- **Every other push** gets its own preview deployment at a stable per-branch URL. Previews use the same password and share the same stored sets.
+- **To test v1.2 before the PRs are merged,** use its branch URL, https://studying-with-kube-git-v12-provid-7fcfed-kubellinghams-projects.vercel.app. The short URL still runs the v1.1 build, which doesn't know about AI/ML API or Copy for review. To put v1.2 on the short URL instead: **Deployments →** newest `v1.2-provider-and-review` deployment **→ ⋯ → Promote**.
 
 ### The access password
 
@@ -38,7 +39,8 @@ Changing the password signs every device out.
 
    Without the key for the chosen provider, uploads fail with a message naming the missing variable.
 2. **Create the storage for share links.** Under **Storage → Create → Blob**, choose **Private** access and connect the store to `studying-with-kube` for all environments. Vercel then adds `BLOB_READ_WRITE_TOKEN` to the project by itself. Until this exists, sets still generate, but they show "Share links aren't set up on this server yet".
-3. **Redeploy** the deployment marked **Production** (Deployments → ⋯ → Redeploy) so the new variables take effect.
+3. **Redeploy** so the new variables take effect: Deployments → ⋯ → **Redeploy** on the deployment you're testing. For v1.2 that's the newest `v1.2-provider-and-review` deployment (or the one marked **Production**, once v1.2 is promoted or merged).
+4. **Remove the old model override.** `OPENROUTER_MODEL` is still set to `anthropic/claude-sonnet-5.5` on the project from v1.1. Delete it, so OpenRouter uses the Haiku default. It doesn't affect AI/ML API.
 
 ### Cost
 
