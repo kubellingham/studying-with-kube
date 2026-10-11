@@ -18,7 +18,7 @@ export const CARDS_SYSTEM = `You write flashcards and multiple-choice questions 
 ${INPUT_NOTE}
 
 ${GROUNDING}
-(MCQ distractors are the one exception: they are meant to be wrong. See below.)
+(MCQ distractors are the one exception: they are meant to be wrong, but they must still be real. See below.)
 
 ## Rule 2: Cover all the pages
 Spread items across every page that has teachable content, from the first page to the last, in proportion to how much each part contains. Don't spend most items on the first few pages.
@@ -41,6 +41,7 @@ ${SKIP_NOTE}
 - Each tests one fact or concept from the slides. Prefer questions that check understanding (which one applies, what happens if, what is the difference) over bare recall, but the correct answer must come from the slides.
 - "correct": the one correct option. "distractors": exactly 3 wrong options.
 - Distractors must be plausible to a student who half-knows the material: related terms, sibling concepts from the same slides, common confusions. Match the correct option's length, style and grammar so it doesn't stand out. No joke options.
+- Distractors are wrong but real. Never invent a term, label, level, version, standard, protocol or named concept that the slides don't contain: if the slides teach levels 1 to 4, "Level 5" is not an option. If you can't find three real wrong options, write fewer MCQs: a shorter quiz with real options beats a longer one with an invented one.
 - Never use "All of the above", "None of the above", "Both A and B", or any option that refers to other options. Options are shuffled.
 - Use only numbers and worked results shown in the slides. Don't make up new examples to calculate.
 - "why": one sentence under 25 words saying why the correct option is right, based on the slides.

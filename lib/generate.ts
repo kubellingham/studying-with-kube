@@ -32,6 +32,7 @@ export async function generateStudySet({ fileName, pdf, signal, emit }: Generate
   const provider = activeProvider();
   const { model } = provider.settings();
   const allowedPages = new Set(pdf.pages.map((p) => p.page));
+  const deckText = pdf.pages.map((p) => p.text).join("\n");
   const cardChunks = chunkPages(pdf.pages, CARD_CHUNK_CHARS, MAX_CARD_CHUNKS);
   const summaryParts = chunkPages(pdf.pages, SUMMARY_CHUNK_CHARS, MAX_SUMMARY_PARTS);
   const targets = itemTargets(pdf);
@@ -79,7 +80,7 @@ export async function generateStudySet({ fileName, pdf, signal, emit }: Generate
         signal: callSignal,
       }).then((r) => {
         usages.push(r.usage ?? {});
-        return onlyFromChunk(normalizeCards(r.data, allowedPages), chunk);
+        return onlyFromChunk(normalizeCards(r.data, allowedPages, deckText), chunk);
       }),
     ),
   );

@@ -31,10 +31,16 @@ function list(value: unknown): Record<string, unknown>[] {
 
 const REFERS_TO_OTHER_OPTIONS = /\b(all|none|both|neither) of the (above|these|options)\b|\bboth [a-d] and [a-d]\b|\boption [a-d]\b/i;
 
+/**
+ * `deckText` is all the slide text: an MCQ is dropped if one of its options
+ * names something the slides never mention (see inventsLabel).
+ */
 export function normalizeCards(
   data: unknown,
   allowedPages: Set<number>,
+  deckText: string,
 ): { flashcards: Draft<Flashcard>[]; mcqs: Draft<Mcq>[] } {
+  const deck = deckText.toLowerCase().replace(/\s+/g, " ");
   const root = (data ?? {}) as Record<string, unknown>;
 
   const flashcards: Draft<Flashcard>[] = [];
@@ -62,6 +68,7 @@ export function normalizeCards(
     const options = [correct, ...distractors.slice(0, 3)];
     const distinct = new Set(options.map((o) => o.toLowerCase()));
     if (distinct.size !== 4 || options.some((o) => REFERS_TO_OTHER_OPTIONS.test(o))) continue;
+    if (options.some((o) => inventsLabel(o, deck))) continue;
 
     // Models favour certain answer positions; shuffle so the answer isn't guessable.
     const order = shuffle([0, 1, 2, 3]);
@@ -76,6 +83,47 @@ export function normalizeCards(
   }
 
   return { flashcards, mcqs };
+}
+
+// Labels that look like named things: a label word or capitalized code with a
+// number ("QoS 3", "Level-5", "IPv6", "DHT11"), or an acronym with two or more
+// capitals ("AaaS", "MQTT"). Plain quantities ("1995", "Range 1-5 km") are
+// ordinary wrong answers and aren't checked.
+const NUMBERED_LABEL = /\b([A-Za-z][A-Za-z+]*)[ -]?(\d+(?:\.\d+)*)\b/g;
+const ACRONYM = /\b[A-Za-z]*[A-Z][A-Za-z]*[A-Z][A-Za-z]*\b/g;
+const LABEL_WORDS = new Set(["level", "layer", "version", "class", "type", "tier", "phase", "stage", "generation", "gen", "mode", "category"]);
+
+/**
+ * True if `option` names a numbered label or acronym that appears nowhere in
+ * the slides, like "QoS 3" in a deck that teaches QoS 0, 1 and 2. The prompt
+ * forbids invented distractors; this catches the ones that slip through.
+ */
+export function inventsLabel(option: string, deck: string): boolean {
+  for (const [, word, num] of option.matchAll(NUMBERED_LABEL)) {
+    const w = word.toLowerCase();
+    if (!LABEL_WORDS.has(w) && !/[A-Z]/.test(word.slice(1))) continue;
+    if (!numberNear(deck, w, num)) return true;
+  }
+  for (const [token] of option.matchAll(ACRONYM)) {
+    const t = token.toLowerCase();
+    if (!new RegExp(`\\b${escapeRegExp(t)}`).test(deck) && !new RegExp(`\\b${escapeRegExp(t.replace(/s$/, ""))}\\b`).test(deck)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/** Whether `num` follows `word` closely somewhere in the deck ("QoS 2", "QoS levels: 0, 1, 2", "Level-5"). */
+function numberNear(deck: string, word: string, num: string): boolean {
+  const target = new RegExp(`(^|[^\\d.])${escapeRegExp(num)}(?![\\d]|\\.\\d)`);
+  for (const m of deck.matchAll(new RegExp(`\\b${escapeRegExp(word)}`, "g"))) {
+    if (target.test(deck.slice(m.index + word.length, m.index + word.length + 40))) return true;
+  }
+  return false;
+}
+
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 export function normalizeSummary(
