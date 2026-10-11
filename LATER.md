@@ -27,4 +27,15 @@ Ideas that came up while building v1 and were deliberately not built, because th
 - Accounts and cross-device sync.
 - Spaced repetition and "come back tomorrow" reviews.
 - PPTX, DOCX, scanned PDFs (OCR), past papers.
-- Deployment: rate limits stored outside server memory (e.g. Redis), hosting, a proper per-key spending dashboard.
+- Upload and password-attempt limits stored outside server memory (e.g. Redis), so they hold across Vercel instances; a proper per-key spending dashboard.
+
+## Share links (parked in v1.1)
+
+- Delete / unshare a set, or give links an expiry date.
+- Edit a shared set.
+- See whether a link was opened (view counts).
+- "Keep this set" on a share page: copy it into your own home-page slot.
+- Use the phone's native share sheet (WhatsApp etc.) instead of copy-paste.
+- Link previews in chat apps (set title in the preview). Note: that would show the title to people without the password.
+- A small admin script to list and clean up stored sets.
+- A custom domain instead of studying-with-kube.vercel.app.

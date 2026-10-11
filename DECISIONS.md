@@ -1,6 +1,6 @@
 # Decisions
 
-Each technical decision behind the v1 test build: what was chosen, what else was considered, and why. Newest decisions go at the bottom of the relevant section.
+Each technical decision behind the test build: what was chosen, what else was considered, and why. The v1 decisions come first. The v1.1 decisions (deployment, password, share links) are in their own section at the end. Where v1.1 changed a v1 decision, the v1 section says so.
 
 ---
 
@@ -17,6 +17,8 @@ Each technical decision behind the v1 test build: what was chosen, what else was
 **Why:** Prince already knows Next.js, and one project covers both the page and the API endpoint. Version 16.3.8 rather than 16.4.0 because 16.4.0 came out five days before this build, and a test should run on a version with a few weeks of fixes behind it. There's no component library: the UI is small enough that Tailwind on its own stays readable.
 
 ## Reading the PDF: `unpdf`
+
+> **Changed in v1.1:** the text is now extracted in the browser and only the text is sent to the server. See "PDF text is read in the browser" below.
 
 **Chose:** [`unpdf`](https://github.com/unjs/unpdf), a server-friendly build of Mozilla's pdf.js, to extract text page by page.
 **Considered:** `pdf-parse` (older, with known bundling problems in Next.js); sending the PDF straight to the model as a document (more tokens per page, it can't tell us up front that a PDF is a scan, and images are out of scope anyway).
@@ -101,6 +103,8 @@ The prompts live in `lib/prompts.ts`: one system prompt for flashcards and MCQs,
 
 ## Contract between server and browser
 
+> **Changed in v1.1:** the request is now JSON `{ fileName, pages: string[] }` (each page's raw text) instead of the PDF file. The `done` event also carries `shareId`.
+
 **Chose:** `POST /api/generate` takes a multipart form with a `file` field.
 - **Problems found before any model call** come back as normal JSON errors with a status code: no key configured (500), not a PDF (415), too big (413), scanned or unreadable (422), rate limited (429 with `Retry-After`).
 - **Once generation starts,** the response is a stream of newline-delimited JSON events (types in `lib/types.ts`):
@@ -149,6 +153,8 @@ The page renders only in the browser, never on the server, because its first ren
 
 ## Privacy: nothing kept on the server
 
+> **Changed in v1.1:** generated study sets are now stored (privately) for share links. The PDF and its text still never are. See "What's stored now" below.
+
 The PDF is read into memory for the length of the request, its text is sent to the model, and then it's gone. Nothing is written to disk, cached, or logged; the server log records counts, timings and costs only. One unavoidable caveat: the slide text does go to OpenRouter and to the model provider (Anthropic by default) to be processed, under their data policies.
 
 ## Interface
@@ -169,3 +175,109 @@ There's no test suite. It wasn't required, and the open question is output quali
 - The whole UI ran in headless Chromium: upload, progress, flip, mark, reload to check persistence, review pile, full quiz to results, summary, reset, dark mode and phone width. There were no console errors.
 
 **Not tested:** real model output. No OpenRouter key was available in the build environment, so the prompts have not yet been run against Claude. That is exactly what Prince's test with real slides is for.
+
+---
+
+# v1.1: deployment, access password, share links
+
+## Hosting: one Vercel project, deployed from GitHub
+
+**Chose:**
+- A Vercel project, `studying-with-kube` (team "kubellingham's projects"), linked to the GitHub repo, so every push to a branch deploys automatically.
+- The first push (branch `v1.1-deploy-share`) went out as the project's production deployment. That gave it the short URL **https://studying-with-kube.vercel.app**.
+- Functions run in `iad1` (US East), close to OpenRouter and the model providers.
+
+**Vercel's own login wall is switched off.** Vercel puts its "Deployment Protection" (Vercel Authentication) on new projects by default. It only lets in people logged into Vercel with access to the team, which would block Prince's phone and anyone he shares with. The app's own password gate (next section) replaces it.
+
+**Considered:** Vercel's built-in Password Protection. It's a paid add-on, and the app-level gate does the same job for free.
+
+**Note for later:** after both PRs are merged, check **Settings → Git → Production Branch** is `main`, so the short URL keeps following `main`.
+
+## Access password: a cookie gate in `proxy.ts`
+
+**Chose:** Next.js 16's `proxy.ts` (what used to be called middleware) checks every request except build assets and the icon. The gate is a no-op when `KUBE_ACCESS_PASSWORD` is unset, so local development isn't blocked.
+- **Pages without a valid cookie** are answered with the `/unlock` page at the **same URL** (a rewrite, not a redirect). Nothing about the requested page or set is sent, and the response is marked `private, no-store` so no cache keeps it. Once the password is right, the page simply reloads the URL the visitor was already on, e.g. their share link.
+- **API calls without the cookie** get a 401, so nobody can spend OpenRouter credit without the password. Pages that have been unlocked call the API normally, because the browser sends the cookie along.
+- **`/api/unlock`** checks the password in constant time and sets an `HttpOnly`, `SameSite=Lax` cookie that lasts 90 days ("enter the password once"). It's also `Secure` on https. A wrong guess is answered only after a 0.7 s delay.
+- **The cookie value** is an HMAC derived from the password, never the password itself. Changing `KUBE_ACCESS_PASSWORD` therefore signs every device out.
+- **The password** is four random words plus a number (about 35 bits). With the delay on every wrong guess, guessing it isn't practical, and Prince can rotate it from the Vercel dashboard at any time.
+
+**Considered:**
+- **HTTP Basic Auth:** the ugly browser pop-up, re-prompts on phones, and no way to sign out.
+- **Vercel's password protection:** paid (see above).
+
+## Share-link storage: Vercel Blob, private
+
+**Chose:** One private Vercel Blob file per set, at `sets/<shareId>.json`, with no expiry.
+- **Saved automatically** when a set is generated (`allowOverwrite: false`).
+- **Read by the `/s/[id]` page on the server**, after the password check.
+- **Private access** means a blob has no public URL; it can only be read with the project's server-side token. So the password gate can't be sidestepped by finding a storage URL.
+
+**Considered:**
+- **Vercel KV:** no longer offered as a first-party Vercel product; Redis now comes through a Marketplace integration (Upstash). That's an extra account and integration for what is a single "get JSON by key" lookup.
+- **Any database:** out of scope by the brief.
+
+**Without Blob credentials:**
+- **Locally**, sets are kept in the dev server's memory, so share links work until it restarts.
+- **On Vercel**, sharing switches off and the set shows "Share links aren't set up on this server yet". Silently hiding the button would leave Prince wondering where it went.
+
+**Setup gap:** the Vercel connection used to build this wasn't allowed to create storage stores (a 403 from the API), so Prince creates the Blob store in the dashboard. The steps are in README.
+
+## Share ID shape
+
+**Chose:** 15 random bytes from Node's `crypto.randomBytes`, encoded as base64url. That gives exactly 20 URL-safe characters (`A–Z a–z 0–9 _ -`), or 120 bits: unguessable, and short enough to send in a chat.
+
+IDs are checked against `^[A-Za-z0-9_-]{20}$` before any storage lookup, so malformed links never reach storage. The ID is stored inside the set (`shareId`) and returned in the generation response's `done` event.
+
+## The `/s/[id]` page
+
+- **The set is loaded on the server** (after the gate) and handed to the same study components as the home page. They are now shared through `components/StudyView.tsx`.
+- **Read-only:** nothing is ever written back to the stored copy.
+- **The viewer's own progress** (marks, quiz answers, position) lives in their browser under `kube:v1:shared-progress`. It's separate from the home page's set, and opening a share link never replaces the viewer's own set at `/`. Like the home page, it holds one set at a time: opening a different shared set starts its progress fresh.
+- **Unknown or malformed IDs** get a "This share link doesn't open a set" page (HTTP 404). A storage outage gets a "Try again" page.
+- Share pages and the unlock page tell search engines not to index them.
+
+## PDF text is read in the browser (needed for Vercel)
+
+**Problem:** Vercel functions accept request bodies of at most 4.5 MB, and lecture-slide PDFs are often 5–15 MB. v1 uploaded the PDF itself, so most real decks would have failed on Vercel with "payload too large".
+
+**Chose:** The browser reads the PDF's text with the same pdf.js library (`unpdf`, now in `lib/readPdf.ts`), loaded only when a file is picked. It then sends JSON with each page's raw text, about 15 KB for the 70-page test deck.
+- **The server still does all the cleanup** (headers/footers, slide numbers) in `lib/pdf.ts`.
+- **The server re-checks every limit:** at most 3 MB of JSON, 100 pages and 200k characters of text, plus the scanned-PDF check. Nothing the browser sends is trusted.
+- **Prompts, chunking and the model are untouched.**
+
+**Side benefits:**
+- Uploads from a phone are fast, because it sends kilobytes, not megabytes.
+- The PDF file itself now never leaves the device.
+
+**Considered:** Uploading the PDF to Blob storage from the browser, then having the server fetch it, process it and delete it. That's more moving parts (an upload-token route, temporary storage, cleanup if a request dies), and it stores the PDF, however briefly.
+
+## Upload limits on Vercel
+
+The upload limits (`lib/rateLimit.ts`) are kept in server memory. On Vercel the app can run on several instances at once, each counting separately, so they're a speed bump rather than a cap. Unchanged from v1 on purpose: the password gate keeps strangers out, and **the credit limit on the OpenRouter key is the real spending cap**. README says so.
+
+## What's stored now
+
+| Where | What | How long |
+| --- | --- | --- |
+| Vercel Blob (private) | Each generated set: title, file name, page counts, cards, questions, summary, warnings, model name | Until deleted (no expiry in v1.1) |
+| Your browser | Your current set and your progress; progress on the last shared set you opened | Until Reset / new upload |
+| Nowhere | The PDF file and its extracted text | |
+
+## How v1.1 was tested
+
+- **Locally, against the mock OpenRouter, in headless Chromium:**
+  - **Upload:** the browser reads the PDF and posts 15 KB of JSON instead of the file.
+  - **Share link:** opened in a second, phone-sized browser shows the identical set (same title and counts). Its progress survives a reload and is stored separately; that "phone"'s own home page is unaffected.
+  - **Bad files and links:** locked and scanned PDFs show clear messages and keep the current set. Unknown and malformed IDs give the 404 page.
+  - **The full v1 UI flow** (flip, marks, review pile, quiz, summary, reset) still passes unchanged.
+- **The gate, locally and on the live deployment:**
+  - Pages without the cookie get only the password form; share pages leak no set content.
+  - APIs return 401 without the cookie.
+  - A wrong password stays locked; the right one sets a `Secure; HttpOnly` cookie and reloads the same URL.
+  - Unlocked requests reach the app and the generate API.
+- **On the live deployment, in a phone-sized browser:** unlock, then upload. The production bundle reads the PDF in the browser and posts the text. It stops at "The server has no OPENROUTER_API_KEY", as expected until the key is added.
+
+**Not tested on Vercel:**
+- **Generation itself:** the OpenRouter key isn't set yet.
+- **Blob storage:** the store can't be created from here (see above). Both start working as soon as Prince adds them and redeploys.
