@@ -61,7 +61,9 @@ ${GROUNDING}
 
 ## Shape
 - Organize by topic, in the slides' order. Use the slides' own section or slide headings as section headings. Merge consecutive slides on the same topic into one section; don't make one section per slide.
-- Each section has 2 to 6 bullet points. Each bullet is one crisp revision note under 25 words: a definition, a distinction, a key property, a formula, a step, a result. Not paragraphs, and not a reworded copy of every line on the slide.
+- Each section usually has 2 to 6 bullet points; a list section has one per item, however many that is. Each bullet is one crisp revision note under 25 words: a definition, a distinction, a key property, a formula, a step, a result. Not paragraphs, and not a reworded copy of every line on the slide.
+- Lists: when the slides give a list of items (the seven characteristics, the three layers), keep it in one section with one bullet per item and every item present. If the heading states or implies a count ("Seven Characteristics", "The three phases"), the item bullets match that count exactly. Never fold one item's description into another item's bullet.
+- Summary and recap slides that restate earlier slides add no new bullets.
 - Wrap the key term of a bullet in **double asterisks** when there is a clear one (at most one per bullet). Use no other formatting.
 - Cover every page with teachable content, from the first page to the last.
 ${SKIP_NOTE}
