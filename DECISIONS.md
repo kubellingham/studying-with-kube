@@ -532,3 +532,80 @@ About $0.008 per run on the IoT unit, against about $0.005 on the same text with
 - **Not reliable yet:** run-to-run variance remains. The untitled p.15 recap sometimes gets one or two list-style cards.
 - **Regression:** the mocked UI flow, swipe tests and keyboard tests pass. Lint, typecheck and the production build pass.
 
+## v1.3.1: engine maintenance (five fixes)
+
+A narrow release before testers arrive. Each fix comes from repeated observations across eight real LPU tests and four external reviews. No new product surface; candidates A, B, D and F stay parked (LATER.md).
+
+**How it was checked:** Haiku 5.5 on AI/ML API, through a Vercel preview of this branch, on a stand-in for Test 7. That's a 22-page "IoT Enabling Technologies & IoT Levels" deck with MQTT QoS 0/1/2, a slide mixing sensors, actuators, RFID and BLE, and IoT levels 1–6.
+
+| | v1.3 (live, 2 runs) | v1.3.1 (preview, 4 runs) |
+|---|---|---|
+| Invented options | "QoS 3" in 3 MCQs, "Application-as-a-Service (AaaS)" in 1 | none |
+| Mixed-category options | "PaaS" vs IaaS / SaaS / **WSN**; "Microcontroller" vs IoT-level parts | none: protocols with protocols, levels with levels, statements with statements |
+| Summary sections | 19, 16 | 7, 7, 7, 7 |
+| MCQs | 12, 12 | 10, 10, 9, 11 |
+| Cost per run | ~$0.007 | ~$0.007–0.008 |
+
+### Fix G: no invented distractors (highest priority)
+- **Was:** "MCQ distractors are the one exception [to grounding]: they are meant to be wrong."
+- **Now, prompt:** distractors are wrong but real. Never invent a term, label, level, version, standard, protocol or named concept that the slides don't contain. If three real wrong options can't be found, skip that MCQ and make sure a flashcard covers the fact. A shorter quiz with real options beats a longer one with an invented option.
+- **Now, code (`inventsLabel` in `lib/normalize.ts`):** a backstop drops an MCQ if any option names something absent from the deck's text.
+  - *Checked:* a numbered label ("QoS 3", "Level 7", "IPv7", "DHT22", "IEEE 802.11"), or an acronym with two or more capitals ("AaaS").
+  - *How "absent" is decided:* a numbered label counts as present if the number appears within 40 characters of the word anywhere in the slides, so "QoS levels: 0, 1, 2" covers "QoS 1".
+  - *Not checked:* plain quantities ("1995", "Range 1–5 km") are ordinary wrong answers.
+- **Why both:** this is the one failure that is invented content, invisible to a student, rather than a question of selection or compression. The prompt is the fix; the backstop makes the "QoS 3" class impossible even when the prompt slips.
+- **Backstop on v1.3 outputs:**
+  - On the Test-7 stand-in, it would have caught exactly the 4 inventions above.
+  - On eight other real sets (84 MCQs), its only drops were IEEE 802.11 / 802.3 / 802.1X options for "which standard is ZigBee based on?" on slides that only mention 802.15.4. The new rule forbids those too.
+  - With the new prompt, it hasn't had to drop anything (4 runs).
+- **Follow-up after the first preview runs:** with only three real QoS levels, there's no 4-option MCQ to write. In one run QoS then appeared nowhere, so the rule now says the fact goes to a flashcard. In the next two runs QoS was covered by a flashcard each time.
+
+### Fix E: same-category distractors
+- **Was:** distractors should be "plausible… related terms, sibling concepts, common confusions".
+- **Now:** all three distractors come from the correct answer's category. Protocols go with protocols, layers or levels with others of the same model, statements with statements about the same kind of thing. Never mix categories, since students can eliminate by type. If the answer's slide doesn't offer three, take same-category options from elsewhere in the slides. Combined with G: real and same-category, or no MCQ.
+- **Why:** Tests 6 and 8 had a BLE question with an actuator, an RFID tag and a gas sensor as options, plus similar mixes.
+- **Not enforceable in code:** "category" needs meaning, so this one is prompt-only. In the 4 runs every option set was single-category. "Which of these is an actuator?" with sensors as the wrong options still happens; that's a legitimate question about device types.
+
+### Fix H: summary length ceiling
+- **Was:** no length target; 2–6 bullets per section. Section counts across the eight tests: 8, 15, 16, 15, 10, 14, 20, 10 (Test 7: 20 sections, ~76 bullets for 22 pages).
+- **Now:**
+  - `generate.ts` asks for a section count: one per three pages of text, kept between 6 and 12. A 22-page deck gets 7, 31 pages get 10, and 35+ pages get 12. On a deck long enough to be summarized in parts, it's split by text share.
+  - The prompt says to write that many sections, never more, and to consolidate related topics (example slides join their concept) instead of adding sections, with 2–4 bullets per section.
+  - v1.3's list rule stands: a list keeps one bullet per item, so "seven characteristics" is still seven bullets.
+- **Why:** a crammable summary that compresses beats notes that cover everything.
+- **Result:** 7 sections in every run on the 22-page deck, down from 16–19.
+
+### Fix C: the page warning names the pages
+- **Was:** "N pages had no readable text (images or diagrams only) and were skipped." That's true but misleading: a slide with a readable heading can still keep its content in a diagram.
+- **Now:** "Some pages' key content may be in diagrams or images that Kube can't read. If your slides are image-heavy, check pages 2, 6, 20, 23 and 26 against your slides (2 of them had no readable text at all)."
+  - Listed: pages with no text, plus pages with under 40 characters after cleanup (essentially just a heading).
+  - The first and last pages (title, thank you) are left out.
+  - Copy only; no new processing.
+- **Known noise:** section-divider slides are listed too (pages 2 and 20 above), because in text they look the same as a heading over an infographic. Parked in LATER.md.
+
+### PPTX support
+- **Chose:** read `.pptx` in the browser, exactly like PDFs, and post only the text. The brief suggested server-side extraction; the browser was chosen instead for three reasons:
+  - **Size:** a `.pptx` carries its images, so a lecture deck is often far over Vercel's 4.5 MB request limit. Uploading the file would fail for exactly the decks Prince's users have.
+  - **Privacy:** the file never leaves the device, which is the promise the PDF path already makes.
+  - **Simplicity:** the server, prompts and pipeline don't change at all.
+- **Library:** [`fflate`](https://github.com/101arrowz/fflate) for unzipping (no dependencies, mature), plus a small direct reader of the slide XML (`lib/readPptx.ts`, about 150 lines). Together they're an 11 KB (gzipped) chunk that only loads when someone picks a `.pptx`.
+  - **Considered:** `pptx2json`, `node-pptx-parser` and `pptx-text-parser`. They are Node-oriented (fs/Buffer), heavier, little-maintained, and still need a zip library underneath. JSZip does the same job at several times the size.
+  - **Fast on big files:** only the slide XML parts are decompressed, never the media, so large decks read quickly.
+- **What's read:**
+  - *Order and numbering:* slide order comes from `presentation.xml`. Hidden slides are skipped, matching PowerPoint's "Save as PDF", so slide n is page n of the exported PDF and of the slideshow.
+  - *Per slide:* the title first, then text boxes, grouped shapes, tables (one line per row, cells joined with " | ") and SmartArt text.
+  - *Skipped:* slide-number, footer and date boxes, speaker notes, charts, and image alt text.
+  - *Same cleanup:* repeated footers typed as text boxes are removed by the existing `cleanSlides()`, as for PDFs.
+- **Checked:**
+  - A 25-slide deck from python-pptx (table, group, hidden slide, footers, notes, picture) reads the same as LibreOffice's PDF export of it, slide for slide (24 each). Where they differed, the PPTX text was cleaner: in the PDF render, overflowing bullets ran into the footer.
+  - The same deck re-saved by LibreOffice (different XML conventions) reads identically.
+  - Hand-made XML cases cover SmartArt, entity decoding, relative and absolute part paths, and alternate-content duplicates.
+  - In the browser: upload end to end, Copy for review with the slide text, and the errors for `.ppt`, non-slide files and a broken `.pptx`.
+  - On the preview, a real phone-sized upload ran against the real model.
+- **Limits:**
+  - PDF stays at 20 MB.
+  - PPTX may be up to 100 MB, because only its text is decompressed.
+  - Old binary `.ppt` gets "save it as .pptx or PDF".
+- **Known limitation:** PowerPoint decks are often more visual than PDFs (pictures, charts, screenshots of diagrams), and none of that is readable. Fix C's warning applies even more strongly. This is noted in LATER.md as a reason to prioritise vision in a future tier.
+- **Copy:** the uploader, app and API messages that said "PDF" now say "slides" / "PDF or PowerPoint". The header button "New PDF" is now "New upload".
+
