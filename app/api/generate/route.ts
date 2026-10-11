@@ -67,7 +67,9 @@ export async function POST(req: NextRequest) {
       try {
         const set = await generateStudySet({ fileName, pdf, signal: req.signal, emit });
         let shareId: string | null = null;
-        if (sharingEnabled()) {
+        if (!sharingEnabled()) {
+          set.warnings.push("Share links aren't set up on this server yet: no Blob store is connected (see README).");
+        } else {
           try {
             shareId = await saveSharedSet(set);
             set.shareId = shareId;
