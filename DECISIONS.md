@@ -404,6 +404,29 @@ Checked on 2026-10-11 against:
 
 **Tested:** on a production build in headless Chromium, every mapping above, plus a simulated Num-Lock-off numpad and a French-layout "1" key.
 
+## Swipe gestures, and marked cards fly off in their direction
+
+Prince asked for swipes on phones, and for a marked card to move the way it was sent instead of flipping.
+
+- **Gestures:** swipe right = know it, swipe left = don't know, tap = flip. A swipe counts if the card is dragged past about a quarter of its width (at most 120 px) or flicked quickly. A shorter drag springs back. Mouse drags work the same on a laptop.
+- **Scrolling still works:** the card uses `touch-action: pan-y`, so a mostly-vertical drag scrolls the page instead of grabbing the card.
+- **Built with plain pointer events, no gesture library:** it's about 40 lines in `Flashcards.tsx` and adds nothing to the bundle.
+- **Every mark flies off, not just swipes:** the ← / → keys and the buttons do too. A copy of the marked card (on whichever face was showing) flies off left or right from wherever the finger let go. Meanwhile the next card settles in underneath, already unflipped.
+- **Why a copy:** the real card is replaced immediately, so a fast clicker or key-presser is never waiting on an animation. At most three copies are on screen at once.
+- **Reduced motion:** with "reduce motion" switched on in the OS, there's no fly-off and no settle-in. The drag still follows the finger.
+- **No sideways scroll:** the page clips sideways overflow (`overflow-x: clip` on `html` and `body`), so a card flying off doesn't make the page scroll.
+- **Fixed along the way:** each card now mounts fresh. Previously, moving on from a flipped card animated the next card flipping back, which briefly showed its answer.
+
+**Tested:** in headless Chromium on a production build. Phone checks used real touch input via the DevTools protocol:
+- swipe right and left, a quick flick, and a short drag that springs back;
+- tap to flip, and a vertical swipe that scrolls without marking;
+- fly-off direction for swipes, keys and buttons;
+- no sideways page scroll during the fly-off;
+- copies cleaned up after the animation and at the end of a round;
+- reduced motion.
+
+The keyboard and full v1 flow regressions still pass.
+
 ## How v1.2 was tested
 
 There's no AI/ML API key in the build environment, so **AI/ML API is proven only against a local mock built from its documented formats**, not a real key.

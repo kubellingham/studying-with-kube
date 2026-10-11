@@ -80,8 +80,46 @@ body {
 .flip-back {
   transform: rotateY(180deg);
 }
+
+/* A marked card flies off in its direction (right = know it, left = don't know).
+   --from-x / --from-rot pick up where a swipe let go; --dir is 1 or -1. */
+@keyframes card-fly {
+  from {
+    transform: translateX(var(--from-x, 0px)) rotate(var(--from-rot, 0deg));
+    opacity: 1;
+  }
+  to {
+    transform: translateX(calc(var(--dir, 1) * 115vw)) rotate(calc(var(--dir, 1) * 28deg));
+    opacity: 0.3;
+  }
+}
+.card-ghost {
+  animation: card-fly 0.38s cubic-bezier(0.4, 0, 0.7, 1) forwards;
+}
+/* The next card settles in underneath. */
+@keyframes card-enter {
+  from {
+    transform: scale(0.95);
+    opacity: 0.5;
+  }
+}
+.card-enter {
+  animation: card-enter 0.24s ease-out backwards;
+}
+/* Cards flying off the side mustn't make the page scroll sideways. */
+html,
+body {
+  overflow-x: clip;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .flip-inner {
     transition: none;
+  }
+  .card-ghost {
+    display: none;
+  }
+  .card-enter {
+    animation: none;
   }
 }

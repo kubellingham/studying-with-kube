@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent } from "react";
 import type { CardMark } from "@/lib/storage";
 import type { Flashcard } from "@/lib/types";
 import { Button, isTypingTarget, Kbd, PageRef, shortcutKey } from "./ui";
@@ -23,6 +23,14 @@ export default function Flashcards({ cards, marks, index, onIndex, onMarks }: Pr
   // even though the deck immediately moves on to the next card.
   const [lastMark, setLastMark] = useState<{ value: CardMark; seq: number } | null>(null);
   const markTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  // Swipe: how far the card is dragged sideways right now.
+  const [dragX, setDragX] = useState(0);
+  const [dragging, setDragging] = useState(false);
+  const drag = useRef<{ id: number; x: number; y: number; t: number; active: boolean } | null>(null);
+  const suppressClick = useRef(false);
+  // Copies of just-marked cards, flying off to the side while the next card settles in.
+  const [ghosts, setGhosts] = useState<Ghost[]>([]);
+  const ghostSeq = useRef(0);
 
   const byId = useMemo(() => new Map(cards.map((c) => [c.id, c])), [cards]);
   const deck = useMemo(
@@ -42,13 +50,59 @@ export default function Flashcards({ cards, marks, index, onIndex, onMarks }: Pr
     else onIndex(clamped);
   };
 
-  const mark = (value: CardMark) => {
+  /** `fromX` is where a swipe let go, so the fly-off continues from there. */
+  const mark = (value: CardMark, fromX = 0) => {
     if (!card) return;
+    if (!prefersReducedMotion()) {
+      const ghost = { key: ++ghostSeq.current, card, flipped, value, fromX };
+      setGhosts((current) => [...current.slice(-2), ghost]);
+    }
+    setDragX(0);
     onMarks({ ...marks, [card.id]: value });
     goTo(pos + 1);
     setLastMark((prev) => ({ value, seq: (prev?.seq ?? 0) + 1 }));
     clearTimeout(markTimer.current);
     markTimer.current = setTimeout(() => setLastMark(null), 900);
+  };
+
+  // Swipe right = know it, left = don't know. A tap still flips, and vertical
+  // moves are left to the browser (touch-action: pan-y) so the page still scrolls.
+  const onPointerDown = (e: PointerEvent<HTMLDivElement>) => {
+    suppressClick.current = false;
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    drag.current = { id: e.pointerId, x: e.clientX, y: e.clientY, t: e.timeStamp, active: false };
+  };
+
+  const onPointerMove = (e: PointerEvent<HTMLDivElement>) => {
+    const d = drag.current;
+    if (!d || d.id !== e.pointerId) return;
+    const dx = e.clientX - d.x;
+    const dy = e.clientY - d.y;
+    if (!d.active) {
+      if (Math.abs(dy) > 12 && Math.abs(dy) > Math.abs(dx)) {
+        drag.current = null; // a scroll, not a swipe
+        return;
+      }
+      if (Math.abs(dx) < 10 || Math.abs(dx) < Math.abs(dy)) return;
+      d.active = true;
+      setDragging(true);
+      e.currentTarget.setPointerCapture(e.pointerId);
+    }
+    setDragX(dx);
+  };
+
+  const onPointerEnd = (e: PointerEvent<HTMLDivElement>) => {
+    const d = drag.current;
+    drag.current = null;
+    if (!d?.active || d.id !== e.pointerId) return;
+    setDragging(false);
+    suppressClick.current = true; // the click that ends a drag isn't a tap
+    const dx = e.clientX - d.x;
+    const speed = Math.abs(dx) / Math.max(1, e.timeStamp - d.t);
+    const far = Math.abs(dx) > Math.min(120, e.currentTarget.offsetWidth * 0.28);
+    const flick = Math.abs(dx) > 40 && speed > 0.6;
+    if (e.type === "pointerup" && (far || flick)) mark(dx > 0 ? "know" : "dont", dx);
+    else setDragX(0);
   };
 
   const startReview = () => {
@@ -114,67 +168,140 @@ export default function Flashcards({ cards, marks, index, onIndex, onMarks }: Pr
         <div className="h-full rounded-full bg-accent transition-all" style={{ width: `${(pos / deck.length) * 100}%` }} />
       </div>
 
-      {card ? (
-        <>
-          <div className="flip relative mt-6">
-            {lastMark && (
-              <span
-                key={lastMark.seq}
-                aria-live="polite"
-                className={`pointer-events-none absolute -top-3 left-1/2 z-10 -translate-x-1/2 rounded-full px-3 py-1 text-xs font-semibold shadow-sm ${
-                  lastMark.value === "know" ? "bg-good text-white dark:text-[#111114]" : "bg-bad text-white dark:text-[#111114]"
-                }`}
-              >
-                {lastMark.value === "know" ? "✓ Know it" : "✗ Don't know"}
-              </span>
-            )}
-            <button
-              type="button"
-              onClick={() => setFlipped((f) => !f)}
-              aria-label={flipped ? "Show question" : "Show answer"}
-              className={`flip-inner w-full text-left focus-visible:outline-none ${flipped ? "is-flipped" : ""}`}
+      <div className="relative mt-6">
+        {lastMark && (
+          <span
+            key={lastMark.seq}
+            aria-live="polite"
+            className={`pointer-events-none absolute -top-3 left-1/2 z-30 -translate-x-1/2 rounded-full px-3 py-1 text-xs font-semibold shadow-sm ${
+              lastMark.value === "know" ? "bg-good text-white dark:text-[#111114]" : "bg-bad text-white dark:text-[#111114]"
+            }`}
+          >
+            {lastMark.value === "know" ? "✓ Know it" : "✗ Don't know"}
+          </span>
+        )}
+        {card ? (
+          <>
+            {/* Keyed by card, so each card mounts fresh: unflipped, undragged, settling in. */}
+            <div
+              key={card.id}
+              onPointerDown={onPointerDown}
+              onPointerMove={onPointerMove}
+              onPointerUp={onPointerEnd}
+              onPointerCancel={onPointerEnd}
+              className={`relative touch-pan-y select-none ${dragging ? "" : "transition-transform duration-200 ease-out"}`}
+              style={{ transform: dragX ? `translateX(${dragX}px) rotate(${dragX / 20}deg)` : undefined }}
             >
-              <Face card={card} side="front" mark={marks[card.id]} hidden={flipped} />
-              <Face card={card} side="back" mark={marks[card.id]} hidden={!flipped} />
-            </button>
-          </div>
+              {dragX !== 0 && (
+                <SwipeStamp value={dragX > 0 ? "know" : "dont"} strength={Math.min(1, Math.abs(dragX) / 110)} />
+              )}
+              <div className="flip card-enter">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (suppressClick.current) {
+                      suppressClick.current = false;
+                      return;
+                    }
+                    setFlipped((f) => !f);
+                  }}
+                  aria-label={flipped ? "Show question" : "Show answer"}
+                  className={`flip-inner w-full text-left focus-visible:outline-none ${flipped ? "is-flipped" : ""}`}
+                >
+                  <Face card={card} side="front" mark={marks[card.id]} hidden={flipped} />
+                  <Face card={card} side="back" mark={marks[card.id]} hidden={!flipped} />
+                </button>
+              </div>
+            </div>
 
-          {/* Laid out like a swipe, matching the keys: don't know on the left, know it on the right. */}
-          <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-4">
-            <Button variant="bad" className="order-1" onClick={() => mark("dont")}>
-              ← Don&apos;t know
-            </Button>
-            <Button className="order-3 sm:order-2" onClick={() => goTo(pos - 1)} disabled={pos === 0}>
-              Previous
-            </Button>
-            <Button className="order-4 sm:order-3" onClick={() => goTo(pos + 1)}>
-              Next
-            </Button>
-            <Button variant="good" className="order-2 sm:order-4" onClick={() => mark("know")}>
-              Know it →
-            </Button>
+            {/* Laid out like a swipe, matching the keys: don't know on the left, know it on the right. */}
+            <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <Button variant="bad" className="order-1" onClick={() => mark("dont")}>
+                ← Don&apos;t know
+              </Button>
+              <Button className="order-3 sm:order-2" onClick={() => goTo(pos - 1)} disabled={pos === 0}>
+                Previous
+              </Button>
+              <Button className="order-4 sm:order-3" onClick={() => goTo(pos + 1)}>
+                Next
+              </Button>
+              <Button variant="good" className="order-2 sm:order-4" onClick={() => mark("know")}>
+                Know it →
+              </Button>
+            </div>
+            <p className="mt-4 text-center text-xs text-muted sm:hidden">
+              Swipe right if you know it, left if you don&apos;t · tap to flip
+            </p>
+            <p className="mt-4 hidden text-center text-xs text-muted sm:block">
+              <Kbd>Space</Kbd> flip · <Kbd>←</Kbd> don&apos;t know · <Kbd>→</Kbd> know it · also <Kbd>N</Kbd> /{" "}
+              <Kbd>Y</Kbd> or <Kbd>1</Kbd> / <Kbd>2</Kbd>, or drag the card
+            </p>
+          </>
+        ) : (
+          <RoundDone
+            total={cards.length}
+            know={know}
+            dont={dontIds.length}
+            reviewing={!!reviewIds}
+            onReviewDont={startReview}
+            onRestart={() => {
+              exitReview();
+              onIndex(0);
+            }}
+            onClearMarks={() => onMarks({})}
+            onBack={() => goTo(deck.length - 1)}
+          />
+        )}
+        {ghosts.map((g) => (
+          <div
+            key={g.key}
+            aria-hidden
+            className="card-ghost pointer-events-none absolute inset-x-0 top-0 z-20"
+            style={
+              {
+                "--from-x": `${g.fromX}px`,
+                "--from-rot": `${g.fromX / 20}deg`,
+                "--dir": g.value === "know" ? 1 : -1,
+              } as CSSProperties
+            }
+            onAnimationEnd={(e) => {
+              if (e.target === e.currentTarget) setGhosts((current) => current.filter((x) => x.key !== g.key));
+            }}
+          >
+            <SwipeStamp value={g.value} strength={1} />
+            <Face card={g.card} side={g.flipped ? "back" : "front"} mark={g.value} hidden={false} plain />
           </div>
-          <p className="mt-4 hidden text-center text-xs text-muted sm:block">
-            <Kbd>Space</Kbd> flip · <Kbd>←</Kbd> don&apos;t know · <Kbd>→</Kbd> know it · also <Kbd>N</Kbd> / <Kbd>Y</Kbd> or{" "}
-            <Kbd>1</Kbd> / <Kbd>2</Kbd>
-          </p>
-        </>
-      ) : (
-        <RoundDone
-          total={cards.length}
-          know={know}
-          dont={dontIds.length}
-          reviewing={!!reviewIds}
-          onReviewDont={startReview}
-          onRestart={() => {
-            exitReview();
-            onIndex(0);
-          }}
-          onClearMarks={() => onMarks({})}
-          onBack={() => goTo(deck.length - 1)}
-        />
-      )}
+        ))}
+      </div>
     </div>
+  );
+}
+
+interface Ghost {
+  key: number;
+  card: Flashcard;
+  flipped: boolean;
+  value: CardMark;
+  fromX: number;
+}
+
+function prefersReducedMotion(): boolean {
+  return typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+/** "KNOW IT" / "DON'T KNOW" stamp that fades in as the card is dragged towards that side. */
+function SwipeStamp({ value, strength }: { value: CardMark; strength: number }) {
+  const know = value === "know";
+  return (
+    <span
+      aria-hidden
+      style={{ opacity: strength }}
+      className={`pointer-events-none absolute top-16 z-10 rounded-lg border-2 bg-surface/80 px-3 py-1 text-sm font-extrabold tracking-widest ${
+        know ? "left-6 -rotate-12 border-good text-good" : "right-6 rotate-12 border-bad text-bad"
+      }`}
+    >
+      {know ? "KNOW IT" : "DON'T KNOW"}
+    </span>
   );
 }
 
@@ -183,19 +310,22 @@ function Face({
   side,
   mark,
   hidden,
+  plain = false,
 }: {
   card: Flashcard;
   side: "front" | "back";
   mark?: CardMark;
   hidden: boolean;
+  /** A standalone face, outside the flip card (the fly-off copy). */
+  plain?: boolean;
 }) {
   const isBack = side === "back";
   return (
     <div
       aria-hidden={hidden}
-      className={`flip-face flex min-h-72 flex-col rounded-2xl border bg-surface p-6 shadow-sm sm:p-8 ${
-        isBack ? "flip-back border-accent/40" : "border-line"
-      }`}
+      className={`flex min-h-72 flex-col rounded-2xl border bg-surface p-6 shadow-sm sm:p-8 ${
+        plain ? "" : `flip-face ${isBack ? "flip-back" : ""}`
+      } ${isBack ? "border-accent/40" : "border-line"}`}
     >
       <div className="flex items-start justify-between gap-3">
         <span className="truncate text-xs font-medium uppercase tracking-wide text-muted">{card.topic}</span>
@@ -235,7 +365,7 @@ function RoundDone(props: {
 }) {
   const unmarked = props.total - props.know - props.dont;
   return (
-    <div className="mt-6 rounded-2xl border border-line bg-surface p-8 text-center">
+    <div className="rounded-2xl border border-line bg-surface p-8 text-center">
       <p className="text-lg font-semibold">{props.reviewing ? "Review round done" : "You've been through every card"}</p>
       <p className="mt-2 text-sm text-muted">
         Know {props.know} · Don&apos;t know {props.dont} · Not marked {unmarked}
