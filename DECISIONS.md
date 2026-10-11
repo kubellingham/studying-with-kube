@@ -164,7 +164,7 @@ The PDF is read into memory for the length of the request, its text is sent to t
 ## Interface
 
 - **One page, three tabs** (Flashcards, Quiz, Summary) under the set's title. "New PDF" and "Reset" sit in the header.
-- **Flashcards:** a card that flips in 3D (the animation is off for people who've turned on reduced motion), previous/next, and "Don't know" / "Know it", which mark the card and move to the next one. Keyboard: Space flips, ← → move, 1 and 2 mark.
+- **Flashcards:** a card that flips in 3D (the animation is off for people who've turned on reduced motion), previous/next, and "Don't know" / "Know it", which mark the card and move to the next one. Keyboard: Space flips, ← → move, 1 and 2 mark. *(Changed in v1.2: ← / → now mark, swipe-style; see "Keyboard shortcuts" in the v1.2 section.)*
   - *Small addition beyond the brief:* "Review don't-knows" runs through just the cards you marked "don't know", and the end of the deck shows your counts. Without this, the marks wouldn't do anything. It stays inside this set: it's not spaced repetition or tracking across sessions.
 - **Quiz:** one question at a time. An answer is final once chosen. You immediately see the correct option in green, your wrong pick in red, and the one-line "why". Keyboard: 1–4 or A–D to answer, Enter for the next question. The end screen shows your score and lists the questions to go over. You can skip a question.
 - **Summary:** numbered topic cards with page ranges and bold key terms. On wide screens a sticky list of topics on the left lets you jump around.
@@ -378,6 +378,31 @@ Checked on 2026-10-11 against:
 **Size:** about 43 KB for the 70-page test deck. Expect 30–60 KB for a real unit, more than the brief's 15–30 KB guess, because a unit's slide text alone is typically 30–40 KB. Chat apps take pastes of this size (Claude turns a long paste into an attachment). The confirmation shows the size.
 
 **Small layout change to fit the button:** "Copy for review" and "Share this set" now sit in one row under the set's title, instead of the share button sitting to the right of the title. The copy confirmation and the share panel open on their own lines below the row.
+
+## Keyboard shortcuts, after Prince's first real-slides test
+
+**Report:** "1 and 2 don't mark cards, and 1–4 don't answer quiz questions." They worked in Chromium on both dev and production builds, so the likely causes were:
+- a numeric keypad with Num Lock off, which sends `End` / `ArrowDown` instead of "1" / "2";
+- a non-US keyboard layout;
+- the press working but going unnoticed, because the deck jumps straight to the next card.
+
+**Changes:**
+- **Flashcards, swipe-style as Prince asked:**
+
+  | Key | Action |
+  | --- | --- |
+  | **Space** | Flip |
+  | **← / N / 1** | Don't know |
+  | **→ / Y / 2** | Know it |
+
+  - Previous and Next are buttons only now, since the arrow keys mark cards.
+  - The button row matches the keys: "← Don't know" far left, "Know it →" far right, Previous and Next in between. On phones the two mark buttons are on top.
+- **Quiz:** 1–4 or A–D answer, Enter goes to the next question. The hint now mentions A–D.
+- **Robust key reading** (`shortcutKey` in `components/ui.tsx`): digits and letters fall back to the physical key (`event.code`). Number shortcuts therefore work on any layout and on the numeric keypad with Num Lock on or off. Caps Lock and Shift don't matter.
+- **Holding a key down** marks or answers only once.
+- **Visible feedback:** a "✓ Know it" or "✗ Don't know" badge flashes on the card for each mark.
+
+**Tested:** on a production build in headless Chromium, every mapping above, plus a simulated Num-Lock-off numpad and a French-layout "1" key.
 
 ## How v1.2 was tested
 

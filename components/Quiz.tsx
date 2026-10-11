@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import type { Progress } from "@/lib/storage";
 import type { Mcq } from "@/lib/types";
-import { Button, isTypingTarget, Kbd, PageRef } from "./ui";
+import { Button, isTypingTarget, Kbd, PageRef, shortcutKey } from "./ui";
 
 const LETTERS = ["A", "B", "C", "D"];
 
@@ -30,10 +30,12 @@ export default function Quiz({ mcqs, answers, index, onChange }: Props) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (isTypingTarget(e) || e.metaKey || e.ctrlKey || e.altKey || !q) return;
-      const key = e.key.toLowerCase();
-      const option = ["1", "2", "3", "4"].indexOf(key) !== -1 ? Number(key) - 1 : ["a", "b", "c", "d"].indexOf(key);
-      if (option >= 0 && option < q.options.length) {
-        choose(option);
+      // 1–4 or A–D pick an option (layout- and Num-Lock-independent, see shortcutKey).
+      const key = shortcutKey(e);
+      const option = "1234".includes(key) ? Number(key) - 1 : "abcd".indexOf(key);
+      if (key.length === 1 && option >= 0 && option < q.options.length) {
+        e.preventDefault();
+        if (!e.repeat) choose(option);
       } else if ((e.key === "Enter" || e.key === "ArrowRight") && answered) {
         e.preventDefault();
         goTo(pos + 1);
@@ -138,7 +140,7 @@ export default function Quiz({ mcqs, answers, index, onChange }: Props) {
           ← Back
         </Button>
         <p className="hidden text-xs text-muted sm:block">
-          <Kbd>1</Kbd>–<Kbd>4</Kbd> answer · <Kbd>Enter</Kbd> next
+          <Kbd>1</Kbd>–<Kbd>4</Kbd> or <Kbd>A</Kbd>–<Kbd>D</Kbd> answer · <Kbd>Enter</Kbd> next
         </p>
         <Button variant={answered ? "primary" : "secondary"} onClick={() => goTo(pos + 1)}>
           {pos === mcqs.length - 1 ? "See results" : answered ? "Next question →" : "Skip →"}

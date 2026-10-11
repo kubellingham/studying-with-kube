@@ -81,6 +81,19 @@ export function RichText({ text }: { text: string }) {
   );
 }
 
+/**
+ * The key a shortcut should match, lowercased: "y", "2", "ArrowLeft"...
+ * Digits and letters fall back to the physical key (e.code), so number
+ * shortcuts work on any keyboard layout and on the numeric keypad even with
+ * Num Lock off (where "1" arrives as "End").
+ */
+export function shortcutKey(event: KeyboardEvent): string {
+  const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
+  if (/^[a-z0-9]$/.test(key)) return key;
+  const physical = /^(?:Digit|Numpad)([0-9])$/.exec(event.code) ?? /^Key([A-Z])$/.exec(event.code);
+  return physical ? physical[1].toLowerCase() : key;
+}
+
 /** True when a key press should be ignored by page-level shortcuts. */
 export function isTypingTarget(event: KeyboardEvent): boolean {
   const el = event.target as HTMLElement | null;

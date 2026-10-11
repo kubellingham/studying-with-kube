@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { CardMark } from "@/lib/storage";
 import type { Flashcard } from "@/lib/types";
-import { Button, isTypingTarget, Kbd, PageRef } from "./ui";
+import { Button, isTypingTarget, Kbd, PageRef, shortcutKey } from "./ui";
 
 interface Props {
   cards: Flashcard[];
@@ -19,6 +19,10 @@ export default function Flashcards({ cards, marks, index, onIndex, onMarks }: Pr
   const [reviewIds, setReviewIds] = useState<string[] | null>(null);
   const [reviewPos, setReviewPos] = useState(0);
   const [flipped, setFlipped] = useState(false);
+  // Brief "✓ Know it" / "✗ Don't know" badge, so a key press visibly registers
+  // even though the deck immediately moves on to the next card.
+  const [lastMark, setLastMark] = useState<{ value: CardMark; seq: number } | null>(null);
+  const markTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   const byId = useMemo(() => new Map(cards.map((c) => [c.id, c])), [cards]);
   const deck = useMemo(
@@ -42,6 +46,9 @@ export default function Flashcards({ cards, marks, index, onIndex, onMarks }: Pr
     if (!card) return;
     onMarks({ ...marks, [card.id]: value });
     goTo(pos + 1);
+    setLastMark((prev) => ({ value, seq: (prev?.seq ?? 0) + 1 }));
+    clearTimeout(markTimer.current);
+    markTimer.current = setTimeout(() => setLastMark(null), 900);
   };
 
   const startReview = () => {
@@ -55,20 +62,21 @@ export default function Flashcards({ cards, marks, index, onIndex, onMarks }: Pr
     setFlipped(false);
   };
 
+  // Swipe-style keys: Space flips, ← / N / 1 = don't know, → / Y / 2 = know it.
+  // Previous/Next stay on the buttons.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (isTypingTarget(e) || e.metaKey || e.ctrlKey || e.altKey || !card) return;
+      const key = shortcutKey(e);
       if (e.key === " " || e.key === "Enter") {
         e.preventDefault();
-        setFlipped((f) => !f);
-      } else if (e.key === "ArrowRight") {
-        goTo(pos + 1);
-      } else if (e.key === "ArrowLeft") {
-        goTo(pos - 1);
-      } else if (e.key === "1") {
-        mark("dont");
-      } else if (e.key === "2") {
-        mark("know");
+        if (!e.repeat) setFlipped((f) => !f);
+      } else if (e.key === "ArrowLeft" || key === "n" || key === "1") {
+        e.preventDefault();
+        if (!e.repeat) mark("dont");
+      } else if (e.key === "ArrowRight" || key === "y" || key === "2") {
+        e.preventDefault();
+        if (!e.repeat) mark("know");
       }
     };
     window.addEventListener("keydown", onKey);
@@ -108,7 +116,18 @@ export default function Flashcards({ cards, marks, index, onIndex, onMarks }: Pr
 
       {card ? (
         <>
-          <div className="flip mt-6">
+          <div className="flip relative mt-6">
+            {lastMark && (
+              <span
+                key={lastMark.seq}
+                aria-live="polite"
+                className={`pointer-events-none absolute -top-3 left-1/2 z-10 -translate-x-1/2 rounded-full px-3 py-1 text-xs font-semibold shadow-sm ${
+                  lastMark.value === "know" ? "bg-good text-white dark:text-[#111114]" : "bg-bad text-white dark:text-[#111114]"
+                }`}
+              >
+                {lastMark.value === "know" ? "✓ Know it" : "✗ Don't know"}
+              </span>
+            )}
             <button
               type="button"
               onClick={() => setFlipped((f) => !f)}
@@ -120,22 +139,24 @@ export default function Flashcards({ cards, marks, index, onIndex, onMarks }: Pr
             </button>
           </div>
 
+          {/* Laid out like a swipe, matching the keys: don't know on the left, know it on the right. */}
           <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-4">
-            <Button className="order-3 sm:order-none" onClick={() => goTo(pos - 1)} disabled={pos === 0}>
-              ← Previous
+            <Button variant="bad" className="order-1" onClick={() => mark("dont")}>
+              ← Don&apos;t know
             </Button>
-            <Button variant="bad" onClick={() => mark("dont")}>
-              Don&apos;t know
+            <Button className="order-3 sm:order-2" onClick={() => goTo(pos - 1)} disabled={pos === 0}>
+              Previous
             </Button>
-            <Button variant="good" onClick={() => mark("know")}>
-              Know it
+            <Button className="order-4 sm:order-3" onClick={() => goTo(pos + 1)}>
+              Next
             </Button>
-            <Button className="order-4 sm:order-none" onClick={() => goTo(pos + 1)}>
-              Next →
+            <Button variant="good" className="order-2 sm:order-4" onClick={() => mark("know")}>
+              Know it →
             </Button>
           </div>
           <p className="mt-4 hidden text-center text-xs text-muted sm:block">
-            <Kbd>Space</Kbd> flip · <Kbd>←</Kbd> <Kbd>→</Kbd> move · <Kbd>1</Kbd> don&apos;t know · <Kbd>2</Kbd> know it
+            <Kbd>Space</Kbd> flip · <Kbd>←</Kbd> don&apos;t know · <Kbd>→</Kbd> know it · also <Kbd>N</Kbd> / <Kbd>Y</Kbd> or{" "}
+            <Kbd>1</Kbd> / <Kbd>2</Kbd>
           </p>
         </>
       ) : (
