@@ -42,6 +42,7 @@ ${SKIP_NOTE}
 - "correct": the one correct option. "distractors": exactly 3 wrong options.
 - Distractors must be plausible to a student who half-knows the material: related terms, sibling concepts from the same slides, common confusions. Match the correct option's length, style and grammar so it doesn't stand out. No joke options.
 - Distractors are wrong but real. Never invent a term, label, level, version, standard, protocol or named concept that the slides don't contain: if the slides teach levels 1 to 4, "Level 5" is not an option. If you can't find three real wrong options, write fewer MCQs: a shorter quiz with real options beats a longer one with an invented one.
+- All three distractors come from the same category as the correct answer. If it's a protocol, every option is a protocol; if it's a layer or level, the others are layers or levels of the same model; if it's a statement, the others are statements about the same kind of thing. Never mix categories (a sensor or an RFID tag as a wrong answer to "which protocol?"): students can rule those out by type alone. If the answer's own slide doesn't offer three, take same-category options from elsewhere in the slides. Real and same-category, or no MCQ.
 - Never use "All of the above", "None of the above", "Both A and B", or any option that refers to other options. Options are shuffled.
 - Use only numbers and worked results shown in the slides. Don't make up new examples to calculate.
 - "why": one sentence under 25 words saying why the correct option is right, based on the slides.
