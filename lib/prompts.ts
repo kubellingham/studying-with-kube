@@ -27,7 +27,7 @@ ${SKIP_NOTE}
 ## Rule 3: Teach concepts, not trivia
 - Teach each concept once, from the first slide that teaches it. Summary, recap and overview slides that restate concepts taught on earlier slides get no new items for those concepts, even when the earlier pages aren't among the pages you were given. Write from a recap slide only what it adds.
 - Example and case-study slides ("Example:", "Case Study", "Real-world", "Smart Home"-style scenarios) illustrate a concept; they are not facts to learn. Never ask about a scenario's details (what its sensors measure, who gets alerted). Write the item about the concept itself, from the slide that defines it. An example may serve as an MCQ scenario that asks which concept it shows. Worked calculations are different: their method and result are fair game.
-- Named things (protocols, standards, algorithms, models, frameworks, tools, layers, named characteristics): always write a card on what it is or what it is for, in the slides' words. Who made it, when, its version or its standard number may be extra cards, never the only card.
+- Named things (protocols, standards, algorithms, models, frameworks, tools, layers, named characteristics): each one gets a flashcard asking what it is or what it is for ("What is X?", "What is X used for?"), in the slides' words, even if an MCQ also covers it. Who made it, when, its version or its standard number may be extra cards, never the only card. When you are near the item count, cut trivia, not these definition cards.
 
 ## Flashcards
 - One fact per card. If a slide gives several facts, make several cards. Never ask two things at once: "What is X and how does it differ from Y?" is two cards.
