@@ -13,6 +13,10 @@ Ideas that came up while building v1 and were deliberately not built, because th
 - Prompt caching, or calling Anthropic directly, to cut cost once the model is settled.
 - Show cards as soon as the first chunk finishes, instead of waiting for the whole set.
 
+- If AI/ML API returns malformed JSON often: call its native Anthropic endpoint (`/v1/messages`) with structured output, instead of the OpenAI-compatible one.
+- Download the "Copy for review" payload as a `.md` file (for very large units or chat apps that cap pastes).
+- Include slide text when copying for review from a share link (would mean storing slide text server-side, which v1.x deliberately avoids).
+
 ## Study experience
 
 - Shuffle flashcards.

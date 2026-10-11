@@ -1,8 +1,19 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
+import { cleanSlides, type SlidePage } from "@/lib/pdf";
 import { readPdfText } from "@/lib/readPdf";
-import { clearAll, emptyProgress, loadProgress, loadSet, saveProgress, saveSet, type Progress } from "@/lib/storage";
+import {
+  clearAll,
+  emptyProgress,
+  loadProgress,
+  loadSet,
+  loadSource,
+  saveProgress,
+  saveSet,
+  saveSource,
+  type Progress,
+} from "@/lib/storage";
 import type { GenerateEvent, GenerateRequest, StudySet } from "@/lib/types";
 import StudyView from "./StudyView";
 import { Brand, Button } from "./ui";
@@ -16,6 +27,11 @@ export default function KubeApp() {
   const [progress, setProgress] = useState<Progress | null>(() => {
     const initial = loadSet();
     return initial ? loadProgress(initial) : null;
+  });
+  // The cleaned slide text the model saw, kept for "Copy for review".
+  const [slides, setSlides] = useState<SlidePage[] | null>(() => {
+    const initial = loadSet();
+    return initial ? loadSource(initial.id) : null;
   });
   const [showUploader, setShowUploader] = useState(false);
   const [gen, setGen] = useState<GenerationState>({ status: "idle" });
@@ -78,10 +94,14 @@ export default function KubeApp() {
       if (!result) throw new Error("The connection closed before the set was finished. Try again.");
 
       const fresh = emptyProgress(result.id);
+      // The same cleanup the server ran, so the review payload shows exactly what the model saw.
+      const cleaned = cleanSlides(pages).pages;
       setStorageWarning(!saveSet(result));
       saveProgress(fresh);
+      saveSource(result.id, cleaned);
       setSet(result);
       setProgress(fresh);
+      setSlides(cleaned);
       setShowUploader(false);
       setGen({ status: "idle" });
     } catch (err) {
@@ -102,6 +122,7 @@ export default function KubeApp() {
     clearAll();
     setSet(null);
     setProgress(null);
+    setSlides(null);
     setShowUploader(false);
     setStorageWarning(false);
     setGen({ status: "idle" });
@@ -152,6 +173,8 @@ export default function KubeApp() {
         progress={progress}
         onProgress={updateProgress}
         notices={storageWarning ? ["This browser wouldn't save the set, so it will be gone if you close the tab."] : []}
+        slides={slides}
+        missingSlidesNote="This browser doesn't have the slide text for this set (it was made before Copy for review existed). Upload the PDF again to include it."
       />
     </main>
   );

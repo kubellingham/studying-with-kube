@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
-import { LIMITS, serverConfig } from "@/lib/config";
+import { LIMITS } from "@/lib/config";
 import { generateStudySet } from "@/lib/generate";
+import { modelSetupProblem } from "@/lib/model";
 import { cleanSlides } from "@/lib/pdf";
 import { acquireGeneration, clientIp } from "@/lib/rateLimit";
 import { saveSharedSet, sharingEnabled } from "@/lib/shareStore";
@@ -18,9 +19,8 @@ export const maxDuration = 120;
 // request's memory; it is never written anywhere or logged. What is stored
 // (when sharing is configured) is the generated study set, for its share link.
 export async function POST(req: NextRequest) {
-  if (!serverConfig().apiKey) {
-    return fail(500, "The server has no OPENROUTER_API_KEY. Add it to the environment and restart or redeploy (see README).");
-  }
+  const setupProblem = modelSetupProblem();
+  if (setupProblem) return fail(500, setupProblem);
 
   const declaredSize = Number(req.headers.get("content-length") ?? 0);
   if (declaredSize > LIMITS.maxBodyBytes) return tooMuchText();

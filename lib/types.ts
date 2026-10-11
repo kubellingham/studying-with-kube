@@ -42,6 +42,8 @@ export interface StudySet {
     textPages: number;
   };
   model: string;
+  /** Which provider generated it ("openrouter" | "aimlapi"). Absent on sets made before v1.2. */
+  provider?: string;
   summary: SummarySection[];
   flashcards: Flashcard[];
   mcqs: Mcq[];

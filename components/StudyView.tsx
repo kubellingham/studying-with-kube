@@ -1,7 +1,9 @@
 "use client";
 
+import type { SlidePage } from "@/lib/pdf";
 import type { Progress, Tab } from "@/lib/storage";
 import type { StudySet } from "@/lib/types";
+import CopyForReview from "./CopyForReview";
 import Flashcards from "./Flashcards";
 import Quiz from "./Quiz";
 import ShareLink from "./ShareLink";
@@ -13,10 +15,14 @@ interface Props {
   onProgress: (patch: Partial<Progress>) => void;
   /** Extra notes shown with the set's own warnings. */
   notices?: string[];
+  /** Slide text for "Copy for review", or null when this browser doesn't have it. */
+  slides: SlidePage[] | null;
+  /** Why the slide text is missing, written into the review payload when it is. */
+  missingSlidesNote: string;
 }
 
 /** Title, warnings, share link and the three study modes. Used by the home page and /s/[id]. */
-export default function StudyView({ set, progress, onProgress, notices = [] }: Props) {
+export default function StudyView({ set, progress, onProgress, notices = [], slides, missingSlidesNote }: Props) {
   const warnings = [...notices, ...set.warnings];
   const tabs: { id: Tab; label: string; count?: number }[] = [
     { id: "flashcards", label: "Flashcards", count: set.flashcards.length },
@@ -27,13 +33,13 @@ export default function StudyView({ set, progress, onProgress, notices = [] }: P
   return (
     <>
       <section className="mt-8">
-        <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
-          <div className="min-w-0">
-            <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">{set.title}</h1>
-            <p className="mt-1 text-sm text-muted">
-              {set.source.fileName} · {set.source.pageCount} pages · made {formatDate(set.createdAt)}
-            </p>
-          </div>
+        <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">{set.title}</h1>
+        <p className="mt-1 text-sm text-muted">
+          {set.source.fileName} · {set.source.pageCount} pages · made {formatDate(set.createdAt)}
+        </p>
+        {/* One row of actions; their status line / share panel wrap onto full-width rows below. */}
+        <div className="mt-4 flex flex-wrap items-start gap-2">
+          <CopyForReview set={set} slides={slides} missingSlidesNote={missingSlidesNote} />
           {set.shareId && <ShareLink shareId={set.shareId} />}
         </div>
         {warnings.length > 0 && (

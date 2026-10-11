@@ -39,7 +39,13 @@ export default function SharedApp({ set }: { set: StudySet }) {
           <span className="hidden sm:inline">Upload your own</span>
         </Link>
       </header>
-      <StudyView set={set} progress={progress} onProgress={updateProgress} />
+      <StudyView
+        set={set}
+        progress={progress}
+        onProgress={updateProgress}
+        slides={null}
+        missingSlidesNote="This set was opened from a share link, and share links don't carry the slide text. Use Copy for review on the device that generated the set to include it."
+      />
     </main>
   );
 }

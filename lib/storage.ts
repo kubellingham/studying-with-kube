@@ -2,10 +2,13 @@
 // through it. Both are versioned so a future format change can't crash the
 // page on old data: anything unrecognised is simply discarded.
 
+import type { SlidePage } from "./pdf";
 import { STUDY_SET_VERSION, type StudySet } from "./types";
 
 const SET_KEY = "kube:v1:set";
 const PROGRESS_KEY = "kube:v1:progress";
+/** The cleaned slide text of the home page's set, for "Copy for review". Never sent anywhere. */
+const SOURCE_KEY = "kube:v1:source";
 /** Progress on a set opened from a share link (/s/<id>), kept apart from the home page's. */
 export const SHARED_PROGRESS_KEY = "kube:v1:shared-progress";
 
@@ -55,10 +58,21 @@ export function saveProgress(progress: Progress, key = PROGRESS_KEY): void {
   write(key, progress);
 }
 
+/** Keeps the slide text next to the set; false if the browser refused (e.g. full). */
+export function saveSource(setId: string, pages: SlidePage[]): boolean {
+  return write(SOURCE_KEY, { setId, pages });
+}
+
+export function loadSource(setId: string): SlidePage[] | null {
+  const saved = read<{ setId: string; pages: SlidePage[] }>(SOURCE_KEY);
+  return saved && saved.setId === setId && Array.isArray(saved.pages) ? saved.pages : null;
+}
+
 export function clearAll(): void {
   try {
     localStorage.removeItem(SET_KEY);
     localStorage.removeItem(PROGRESS_KEY);
+    localStorage.removeItem(SOURCE_KEY);
   } catch {
     // storage unavailable; nothing to clear
   }

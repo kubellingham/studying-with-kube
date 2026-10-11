@@ -31,11 +31,15 @@ Each technical decision behind the test build: what was chosen, what else was co
 
 ## AI provider: OpenRouter, called with plain `fetch`
 
+> **Changed in v1.2:** the provider is now pluggable (OpenRouter or AI/ML API, chosen by `KUBE_PROVIDER`), and the default model is Claude Haiku 5.5. See the v1.2 section at the end.
+
 **Chose:** OpenRouter's OpenAI-compatible chat endpoint, called directly with `fetch` and no SDK.
 **Considered:** The Anthropic API directly, using its official SDK.
 **Why:** Prince already has an OpenRouter setup from the previous repo, so there's no new account. The bigger reason is that this build exists to judge output quality, and OpenRouter lets you try another model by changing one line in `.env.local`. When the model is settled and we're productizing, going direct to the provider is worth revisiting: it avoids OpenRouter's fee and gives finer control, such as prompt caching (see `LATER.md`).
 
 ## Model: Claude Sonnet 5.5 by default, Claude Haiku 5.5 as the cheap comparison
+
+> **Changed in v1.2:** the default is now Claude Haiku 5.5 on both providers. Sonnet 5.5 stays the paid-tier candidate. See the v1.2 section at the end.
 
 **Chose:** `anthropic/claude-sonnet-5.5`, with reasoning effort `low`.
 **Considered:** `anthropic/claude-haiku-5.5` (about 20x cheaper), Gemini Flash and GPT-5.x mini-class models.
@@ -280,3 +284,111 @@ The upload limits (`lib/rateLimit.ts`) are kept in server memory. On Vercel the 
 **Not tested on Vercel:**
 - **Generation itself:** the OpenRouter key isn't set yet.
 - **Blob storage:** the store can't be created from here (see above). Both start working as soon as Prince adds them and redeploys.
+
+---
+
+# v1.2: pluggable model provider, Haiku by default, "Copy for review"
+
+## Pluggable provider, chosen by `KUBE_PROVIDER`
+
+**Why:** Prince ran out of OpenRouter credit and has $20 on AI/ML API. Both should work, and switching should be one env var plus a restart or redeploy.
+
+**Chose:**
+- **`lib/model.ts` keeps everything the providers share.** That's `callModelJson()` with the same signature as before, so `lib/generate.ts` didn't change how it calls the model. It also holds the retry and fallback rules, the JSON parsing, the plain-English errors and the per-call cost logging.
+- **`lib/providers/openrouter.ts` and `lib/providers/aimlapi.ts` describe only what differs:** their env vars, the request body, how "out of credit" looks, and where the cost is reported.
+- **`KUBE_PROVIDER`** is `openrouter` (default) or `aimlapi`. An unknown value fails with a message saying so.
+- **Each provider keeps its own env vars**, so both can be configured at once:
+  - OpenRouter: `OPENROUTER_API_KEY`, `OPENROUTER_MODEL`, `OPENROUTER_BASE_URL`, `OPENROUTER_REASONING_EFFORT`.
+  - AI/ML API: `AIMLAPI_API_KEY`, `AIMLAPI_MODEL`, `AIMLAPI_BASE_URL`, `AIMLAPI_REASONING_EFFORT`.
+- **Each set now records `provider`** next to `model`, and the per-upload log line names both.
+
+**Considered:**
+- **A full wrapper per provider:** that duplicates the retry and parsing logic, which is where the bugs would be.
+- **An OpenAI SDK pointed at different base URLs:** an extra dependency that buys nothing over `fetch` here.
+
+**OpenRouter is unchanged:** same request body (strict JSON schema, `provider.require_parameters`, `reasoning`), same retries, same cost logging. The only differences are the default model and slightly reworded error messages, which now name the env var for local and Vercel use.
+
+## Default model: Claude Haiku 5.5 on both providers
+
+**Chose:** `anthropic/claude-haiku-5.5`, which is the same ID on OpenRouter and AI/ML API, at reasoning effort `low`.
+
+**Why Haiku:** the free tier will ship on cheap models, so passing the quality bar on Haiku is the test that matters for the product.
+
+**Why 5.5 and not 4.5:** the brief asked for "Haiku 4.5", but the current Haiku is **5.5**. Both providers list it, and it's the one a free tier would use: it's newer and about 10x cheaper.
+
+| Model | OpenRouter ID | AI/ML API ID | Price (in / out per M tokens) |
+| --- | --- | --- | --- |
+| **Claude Haiku 5.5 (default)** | `anthropic/claude-haiku-5.5` | `anthropic/claude-haiku-5.5` | $0.10 / $0.50 (OpenRouter list; AI/ML API lists the same "from" price) |
+| Claude Haiku 4.5 | `anthropic/claude-haiku-4.5` | `anthropic/claude-haiku-4.5` | $1 / $5 |
+| **Claude Sonnet 5.5 (paid-tier candidate)** | `anthropic/claude-sonnet-5.5` | `anthropic/claude-sonnet-5.5` | $2 / $10 |
+
+- **What Haiku 5.5 costs:** about 1–2 US cents per 70-page unit, so $20 covers on the order of 1,500 uploads.
+- **Caveat:** Haiku 5.5 appeared on both platforms only days before this build (released 2026-10-07). If it misbehaves there (routing errors, odd output), set the model variable to `anthropic/claude-haiku-4.5`; nothing else changes.
+- **Sonnet 5.5** (`anthropic/claude-sonnet-5.5` on both providers) is kept as the candidate for paid-tier generation.
+
+## AI/ML API: what it supports and its quirks
+
+Checked on 2026-10-11 against:
+- the public model list (`GET https://api.aimlapi.com/models`, 930 models);
+- the per-model API reference for `anthropic/claude-haiku-5.5` on the chat-completions endpoint (`/docs-json?model=…&endpoint=openai/chat-completions`);
+- the docs page on 4xx errors;
+- one live call with a dummy key, to see the 401 format.
+
+**Not yet verified with a real key.**
+
+| Topic | AI/ML API | What the app does |
+| --- | --- | --- |
+| Endpoint | `https://api.aimlapi.com/v1/chat/completions`, `Authorization: Bearer <key>`, `system` role accepted in `messages` | Same body shape as OpenRouter |
+| Structured output | **No `response_format` documented for Claude models.** The documented fields are `max_tokens`, `reasoning_effort`, `thinking`, `tools`, `tool_choice`, `stop_sequences`, `system`, `metadata`, `stream`. | No schema enforcement. The JSON shape is already spelled out in both system prompts, and the existing safety nets apply: lenient parsing (bare, fenced or embedded JSON), item-by-item validation, and one retry on unparseable output. |
+| Reasoning | Top-level `reasoning_effort`: `none` / `low` / `medium` / `high` / `xhigh` / `max` | Sends `reasoning_effort: "low"` (change with `AIMLAPI_REASONING_EFFORT`, or `off`) |
+| Out of credit | **403** "You've run out of credits…" (OpenRouter uses 402, and its 403 means something else) | Detected per provider, then shown in plain English |
+| Bad key | 401, `{"status":401,"message":…,"error":{"name":"UnauthorizedException","message":…}}` | "AI/ML API rejected the API key. Check AIMLAPI_API_KEY…" |
+| Rate limit | 429 "Too Many Requests" | One retry, then "AI/ML API is rate-limiting requests right now. Wait a minute and try again." |
+| Cost | `meta.usage.usd_spent` per response (plus OpenAI-style `usage` token counts) | Logged per call and summed per upload, like OpenRouter's `usage.cost` |
+
+- **Cost:** the brief mentioned a token-estimate fallback for cost. There wasn't one in v1, and neither provider needs one, since both report the cost of each call. If a future provider doesn't, the log shows token counts only.
+- **Considered for structured output:** forcing a "tool call" whose input schema is the JSON shape. On current Claude models, forced tool choice doesn't combine with thinking, and it adds a second response format to parse. If JSON failures actually show up in testing, the better step is AI/ML API's native Anthropic endpoint (`/v1/messages`, which it also lists for these models). That's parked in `LATER.md`.
+
+## Plain-English errors name the provider and the env var
+
+| Situation | Message |
+| --- | --- |
+| Missing key | "The server has no AIMLAPI_API_KEY (KUBE_PROVIDER is "aimlapi"). Add it to .env.local, or to the Vercel environment variables, then restart or redeploy." |
+| Bad key | "OpenRouter rejected the API key. Check OPENROUTER_API_KEY (in .env.local, or the Vercel environment variables)." (or the AI/ML API equivalent) |
+| No credit | "The AI/ML API account is out of credits (or over its key limit). Top it up and try again." |
+| Still rate-limited after the retry | "… is rate-limiting requests right now. Wait a minute and try again." This used to surface as a raw "429" message. |
+
+## "Copy for review"
+
+**What it is:** a button next to "Share this set" that copies Markdown to the clipboard. There's no server work, no model call and no new server storage.
+
+**Payload shape:**
+1. **Header:** title, file name, page counts, model and provider, generation time (UTC), item counts, warnings, and whether slide text is included.
+2. **Flashcards:** `F1 · topic · p.N` then `Q:` / `A:`.
+3. **MCQs:** `M1 · topic · p.N` then `Q:`, `Correct:`, `Wrong: a | b | c`, `Why:`.
+4. **Summary:** `### 1. heading · pp.N–M` then bullets.
+5. **Slide text:** `## Slide text (what the model saw)` with the `[[PAGE n]]` blocks.
+
+**The slide text is exactly what the model saw.** The browser already has each page's raw text (it's what gets posted). At copy time it runs the same cleanup function as the server (`cleanSlides`, which removes headers, footers and slide numbers) and the same page formatting (`formatPages`), so the reviewer can check every citation against its page.
+
+**Where the slide text is kept:** in this browser's localStorage (`kube:v1:source`, tied to the set's id), next to the set itself. The button therefore still works after a reload. A new upload replaces it, Reset deletes it, and it's never sent anywhere. If the browser refuses to store it, it's kept in memory for the session.
+
+**On share pages (`/s/[id]`) the button is shown but copies without the slide text,** because shared sets don't carry it. The payload says so ("Slide text: NOT included…") and explains how to include it. I chose show-with-a-note over hiding it: the button then works the same everywhere, and card quality can still be reviewed. Sets made before v1.2 get the same treatment on the home page.
+
+**Size:** about 43 KB for the 70-page test deck. Expect 30–60 KB for a real unit, more than the brief's 15–30 KB guess, because a unit's slide text alone is typically 30–40 KB. Chat apps take pastes of this size (Claude turns a long paste into an attachment). The confirmation shows the size.
+
+**Small layout change to fit the button:** "Copy for review" and "Share this set" now sit in one row under the set's title, instead of the share button sitting to the right of the title. The copy confirmation and the share panel open on their own lines below the row.
+
+## How v1.2 was tested
+
+There's no AI/ML API key in the build environment, so **AI/ML API is proven only against a local mock built from its documented formats**, not a real key.
+
+- **Both providers against the mock:**
+  - **OpenRouter, default settings:** identical request body to v1.1 (strict JSON schema, `reasoning`, `require_parameters`), now with `anthropic/claude-haiku-5.5`; same per-call cost lines.
+  - **AI/ML API:** posts to `/v1/chat/completions` with `reasoning_effort: "low"` and no `response_format` (the mock rejects one if sent). It parses plain and fenced JSON, and reads cost from `meta.usage.usd_spent`.
+  - **Error paths:** a bad key, no credit (403), rate limit (429), a missing key and an unknown `KUBE_PROVIDER` each give the messages above. OpenRouter's no-credit and bad-key messages are unchanged in substance.
+- **"Copy for review" in headless Chromium:**
+  - **Home page:** 43 KB with all 69 `[[PAGE n]]` blocks and no university footers. The slide text is still included after a reload.
+  - **Share link:** copies without the slide text, and says so.
+  - **Reset:** clears it.
+- **Regression:** the full v1 UI flow and the v1.1 share flow still pass. Lint, typecheck and the production build pass.

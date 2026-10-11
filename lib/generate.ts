@@ -1,8 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { chunkPages, formatPages, type PageChunk } from "./chunk";
-import { serverConfig } from "./config";
 import { dedupeFlashcards, mergeSections, normalizeCards, normalizeSummary } from "./normalize";
-import { callModelJson, FatalModelError, type ModelUsage } from "./openrouter";
+import { activeProvider, callModelJson, FatalModelError, type ModelUsage } from "./model";
 import type { ExtractedPdf } from "./pdf";
 import {
   CARDS_SCHEMA,
@@ -30,7 +29,8 @@ interface GenerateArgs {
 }
 
 export async function generateStudySet({ fileName, pdf, signal, emit }: GenerateArgs): Promise<StudySet> {
-  const { model } = serverConfig();
+  const provider = activeProvider();
+  const { model } = provider.settings();
   const allowedPages = new Set(pdf.pages.map((p) => p.page));
   const cardChunks = chunkPages(pdf.pages, CARD_CHUNK_CHARS, MAX_CARD_CHUNKS);
   const summaryParts = chunkPages(pdf.pages, SUMMARY_CHUNK_CHARS, MAX_SUMMARY_PARTS);
@@ -151,7 +151,7 @@ export async function generateStudySet({ fileName, pdf, signal, emit }: Generate
     throw new Error("The model returned nothing usable for this PDF. Try again, or try a different file.");
   }
 
-  logRun(fileName, pdf, flashcards, mcqs, summary.length, usages);
+  logRun(fileName, pdf, flashcards, mcqs, summary.length, usages, `${provider.id}:${model}`);
 
   return {
     version: STUDY_SET_VERSION,
@@ -160,6 +160,7 @@ export async function generateStudySet({ fileName, pdf, signal, emit }: Generate
     title: summaryItems.find((s) => s.title)?.title || fileName.replace(/\.pdf$/i, ""),
     source: { fileName, pageCount: pdf.pageCount, textPages: pdf.pages.length },
     model,
+    provider: provider.id,
     summary,
     flashcards,
     mcqs,
@@ -196,6 +197,7 @@ function logRun(
   mcqs: StudySet["mcqs"],
   sections: number,
   usages: ModelUsage[],
+  modelName: string,
 ) {
   const words = (s: string) => s.split(/\s+/).filter(Boolean).length;
   const longFronts = flashcards.filter((c) => words(c.front) > 15).length;
@@ -204,7 +206,7 @@ function logRun(
   console.log(
     `[kube] "${fileName}": ${pdf.pageCount} pages (${pdf.totalChars} chars) -> ` +
       `${flashcards.length} flashcards (${longFronts} long fronts, ${longBacks} long backs), ` +
-      `${mcqs.length} MCQs, ${sections} summary sections` +
+      `${mcqs.length} MCQs, ${sections} summary sections, ${modelName}` +
       (cost > 0 ? `, ~$${cost.toFixed(3)}` : ""),
   );
 }

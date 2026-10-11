@@ -16,21 +16,14 @@ export const LIMITS = {
   minChars: 300,
 };
 
-export const DEFAULT_MODEL = "anthropic/claude-sonnet-5.5";
-
 function intFromEnv(name: string, fallback: number): number {
   const n = Number.parseInt(process.env[name] ?? "", 10);
   return Number.isFinite(n) && n > 0 ? n : fallback;
 }
 
+/** Upload limits. Model/provider settings live in lib/providers/. */
 export function serverConfig() {
-  const effort = process.env.OPENROUTER_REASONING_EFFORT?.trim() || "low";
   return {
-    apiKey: process.env.OPENROUTER_API_KEY?.trim() || "",
-    baseUrl: (process.env.OPENROUTER_BASE_URL?.trim() || "https://openrouter.ai/api/v1").replace(/\/+$/, ""),
-    model: process.env.OPENROUTER_MODEL?.trim() || DEFAULT_MODEL,
-    /** "off" sends no reasoning setting and lets the model use its default. */
-    reasoningEffort: effort === "off" ? null : effort,
     limitPerIpPerHour: intFromEnv("KUBE_LIMIT_PER_IP_PER_HOUR", 10),
     limitPerDay: intFromEnv("KUBE_LIMIT_PER_DAY", 50),
     maxConcurrent: intFromEnv("KUBE_MAX_CONCURRENT", 3),

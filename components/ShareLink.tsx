@@ -21,13 +21,14 @@ export default function ShareLink({ shareId }: { shareId: string }) {
     }
   };
 
+  // Rendered inside StudyView's wrapping action row; the panel takes a full row below the buttons.
   return (
-    <div className="w-full sm:w-auto">
+    <>
       <Button onClick={() => setOpen((v) => !v)} aria-expanded={open}>
         Share this set
       </Button>
       {open && (
-        <div className="mt-3 rounded-xl border border-line bg-surface p-3 sm:w-96">
+        <div className="order-last basis-full rounded-xl border border-line bg-surface p-3 sm:max-w-md">
           <div className="flex gap-2">
             <input
               ref={inputRef}
@@ -46,6 +47,6 @@ export default function ShareLink({ shareId }: { shareId: string }) {
           </p>
         </div>
       )}
-    </div>
+    </>
   );
 }

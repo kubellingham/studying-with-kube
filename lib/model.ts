@@ -1,4 +1,12 @@
-import { serverConfig } from "./config";
+// The one entry point the engine uses to call a model: callModelJson().
+// Which provider answers is chosen server-wide by KUBE_PROVIDER
+// ("openrouter", the default, or "aimlapi"); call sites never need to know.
+
+import { aimlapi } from "./providers/aimlapi";
+import { openrouter } from "./providers/openrouter";
+import type { Provider, ProviderId } from "./providers/types";
+
+const PROVIDERS: Record<ProviderId, Provider> = { openrouter, aimlapi };
 
 /** An error the user should see verbatim, and that retrying won't fix. */
 export class FatalModelError extends Error {}
@@ -35,23 +43,50 @@ const ATTEMPT_TIMEOUT_MS = 90_000;
 /** Don't start a retry this late; it would blow the ~30s target for the whole set. */
 const RETRY_CUTOFF_MS = 40_000;
 
-// If a model/provider rejects our optional parameters (strict JSON schema,
-// reasoning effort), we fall back to a plain request and remember that for
-// the rest of this server process.
-let preferPlainRequest = false;
+/** The provider KUBE_PROVIDER selects. Throws FatalModelError on an unknown value. */
+export function activeProvider(): Provider {
+  const id = process.env.KUBE_PROVIDER?.trim().toLowerCase() || "openrouter";
+  const provider = Object.hasOwn(PROVIDERS, id) ? PROVIDERS[id as ProviderId] : undefined;
+  if (!provider) {
+    throw new FatalModelError(
+      `KUBE_PROVIDER is "${process.env.KUBE_PROVIDER}", which isn't a provider. Use "openrouter" or "aimlapi".`,
+    );
+  }
+  return provider;
+}
+
+/** A plain-English reason the server can't call a model at all, or null if it can. */
+export function modelSetupProblem(): string | null {
+  let provider: Provider;
+  try {
+    provider = activeProvider();
+  } catch (err) {
+    return (err as Error).message;
+  }
+  if (!provider.settings().apiKey) {
+    return `The server has no ${provider.keyEnv} (KUBE_PROVIDER is "${provider.id}"). Add it to .env.local, or to the Vercel environment variables, then restart or redeploy (see README).`;
+  }
+  return null;
+}
+
+// If a model/provider rejects our optional parameters (schema enforcement,
+// reasoning effort), we fall back to a plain request and remember that, per
+// provider, for the rest of this server process.
+const preferPlain = new Set<ProviderId>();
 
 /**
- * Calls OpenRouter's chat completions endpoint and returns parsed JSON.
- * One retry on transient failures or unparseable output.
+ * Calls the active provider's chat completions endpoint and returns parsed
+ * JSON. One retry on transient failures or unparseable output.
  */
 export async function callModelJson(opts: CallOptions): Promise<ModelResult> {
+  const provider = activeProvider();
   const startedAt = Date.now();
-  let plain = preferPlainRequest;
+  let plain = preferPlain.has(provider.id);
   let lastError: unknown;
 
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
-      const result = await attemptCall(opts, plain);
+      const result = await attemptCall(provider, opts, plain);
       const u = result.usage;
       console.log(
         `[kube] ${opts.label}: ok in ${((Date.now() - startedAt) / 1000).toFixed(1)}s` +
@@ -59,14 +94,14 @@ export async function callModelJson(opts: CallOptions): Promise<ModelResult> {
           (u?.cost != null ? `, $${u.cost.toFixed(4)}` : "") +
           (plain ? " (plain request)" : ""),
       );
-      if (plain && !preferPlainRequest) preferPlainRequest = true;
+      if (plain) preferPlain.add(provider.id);
       return result;
     } catch (err) {
       if (opts.signal.aborted || err instanceof FatalModelError) throw err;
       lastError = err;
       console.warn(`[kube] ${opts.label}: attempt ${attempt} failed: ${(err as Error).message}`);
       if (err instanceof HttpError && (err.status === 400 || err.status === 404 || err.status === 422)) {
-        // 400: an optional parameter was rejected. 404: no provider supports
+        // 400: an optional parameter was rejected. 404: no endpoint supports
         // the parameters we required. Either way, retry without them.
         if (plain) throw err;
         plain = true;
@@ -75,34 +110,23 @@ export async function callModelJson(opts: CallOptions): Promise<ModelResult> {
       await sleep(800, opts.signal);
     }
   }
+
+  if (lastError instanceof HttpError && lastError.status === 429) {
+    throw new Error(`${provider.label} is rate-limiting requests right now. Wait a minute and try again.`);
+  }
   throw lastError;
 }
 
-async function attemptCall(opts: CallOptions, plain: boolean): Promise<ModelResult> {
-  const cfg = serverConfig();
-  const body: Record<string, unknown> = {
-    model: cfg.model,
-    messages: [
-      { role: "system", content: opts.system },
-      { role: "user", content: opts.user },
-    ],
-    max_tokens: opts.maxTokens,
-  };
-  if (!plain) {
-    body.response_format = {
-      type: "json_schema",
-      json_schema: { name: opts.schemaName, strict: true, schema: opts.schema },
-    };
-    body.provider = { require_parameters: true };
-    if (cfg.reasoningEffort) body.reasoning = { effort: cfg.reasoningEffort, exclude: true };
-  }
+async function attemptCall(provider: Provider, opts: CallOptions, plain: boolean): Promise<ModelResult> {
+  const settings = provider.settings();
+  const body = provider.buildBody(opts, settings, plain);
 
-  const res = await fetch(`${cfg.baseUrl}/chat/completions`, {
+  const res = await fetch(`${settings.baseUrl}/chat/completions`, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${cfg.apiKey}`,
+      Authorization: `Bearer ${settings.apiKey}`,
       "Content-Type": "application/json",
-      "X-Title": "StudyingKube",
+      ...provider.extraHeaders,
     },
     body: JSON.stringify(body),
     signal: AbortSignal.any([opts.signal, AbortSignal.timeout(ATTEMPT_TIMEOUT_MS)]),
@@ -119,14 +143,18 @@ async function attemptCall(opts: CallOptions, plain: boolean): Promise<ModelResu
   const apiError = json?.error as { message?: string; code?: number } | undefined;
   if (!res.ok || apiError) {
     const status = res.ok ? Number(apiError?.code) || 502 : res.status;
-    const message = apiError?.message || raw.slice(0, 200) || res.statusText;
+    const message = apiError?.message || (json?.message as string | undefined) || raw.slice(0, 200) || res.statusText;
     if (status === 401) {
-      throw new FatalModelError("OpenRouter rejected the API key. Check OPENROUTER_API_KEY in .env.local.");
+      throw new FatalModelError(
+        `${provider.label} rejected the API key. Check ${provider.keyEnv} (in .env.local, or the Vercel environment variables).`,
+      );
     }
-    if (status === 402) {
-      throw new FatalModelError("The OpenRouter account is out of credits (or over its key limit). Top it up and try again.");
+    if (provider.isOutOfCredit(status, message)) {
+      throw new FatalModelError(
+        `The ${provider.label} account is out of credits (or over its key limit). Top it up and try again.`,
+      );
     }
-    throw new HttpError(status, `OpenRouter ${status}: ${message}`);
+    throw new HttpError(status, `${provider.label} ${status}: ${message}`);
   }
 
   const choice = (json?.choices as Array<{ message?: { content?: unknown }; finish_reason?: string }> | undefined)?.[0];
@@ -137,7 +165,9 @@ async function attemptCall(opts: CallOptions, plain: boolean): Promise<ModelResu
   if (data === undefined) {
     throw new Error(`response was not valid JSON (finish_reason: ${choice?.finish_reason ?? "unknown"})`);
   }
-  return { data, usage: json?.usage as ModelUsage | undefined };
+  const usage = json?.usage as ModelUsage | undefined;
+  const cost = json ? provider.costOf(json) : undefined;
+  return { data, usage: usage || cost != null ? { ...usage, cost: cost ?? usage?.cost } : undefined };
 }
 
 function messageText(content: unknown): string {
