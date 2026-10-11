@@ -44,6 +44,7 @@ ${SKIP_NOTE}
 - Never use "All of the above", "None of the above", "Both A and B", or any option that refers to other options. Options are shuffled.
 - Use only numbers and worked results shown in the slides. Don't make up new examples to calculate.
 - "why": one sentence under 25 words saying why the correct option is right, based on the slides.
+- When consecutive slides cover a set of parallel items (protocols, algorithms, layers, states, types, phases), write at least one MCQ that tells them apart: given a need or a property the slides state, which item fits? The other items make natural distractors.
 
 ## Every item
 - "topic": the slide heading or section the item comes from, in a few words.
