@@ -36,6 +36,7 @@ export async function generateStudySet({ fileName, pdf, signal, emit }: Generate
   const cardChunks = chunkPages(pdf.pages, CARD_CHUNK_CHARS, MAX_CARD_CHUNKS);
   const summaryParts = chunkPages(pdf.pages, SUMMARY_CHUNK_CHARS, MAX_SUMMARY_PARTS);
   const targets = itemTargets(pdf);
+  const summarySections = summaryTarget(pdf);
 
   // A fatal error (bad key, no credits) in one call cancels the rest.
   const stop = new AbortController();
@@ -97,6 +98,7 @@ export async function generateStudySet({ fileName, pdf, signal, emit }: Generate
           pageCount: pdf.pageCount,
           part: i + 1,
           parts: summaryParts.length,
+          sections: share(summarySections, part, pdf.totalChars, 2),
           slides: formatPages(part.pages),
         }),
         schemaName: "unit_summary",
@@ -194,6 +196,15 @@ function onlyFromChunk<F extends { pages: number[] }, M extends { pages: number[
 ) {
   const ours = (item: { pages: number[] }) => item.pages.length === 0 || item.pages.some((p) => p >= chunk.first);
   return { flashcards: items.flashcards.filter(ours), mcqs: items.mcqs.filter(ours) };
+}
+
+/**
+ * Summary sections for the whole unit: about one per three pages of text,
+ * kept between 6 and 12 so the summary stays readable in one sitting. A
+ * 22-page deck gets 7, a 31-page one 10, anything from 35 pages up 12.
+ */
+function summaryTarget(pdf: ExtractedPdf): number {
+  return clamp(Math.round(pdf.pages.length / 3), 6, 12);
 }
 
 function share(total: number, chunk: PageChunk, totalChars: number, min: number): number {

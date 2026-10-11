@@ -64,7 +64,8 @@ ${GROUNDING}
 
 ## Shape
 - Organize by topic, in the slides' order. Use the slides' own section or slide headings as section headings. Merge consecutive slides on the same topic into one section; don't make one section per slide.
-- Each section usually has 2 to 6 bullet points; a list section has one per item, however many that is. Each bullet is one crisp revision note under 25 words: a definition, a distinction, a key property, a formula, a step, a result. Not paragraphs, and not a reworded copy of every line on the slide.
+- Length: write the number of sections you're asked for, never more. A whole unit gets 6 to 12, about one per three pages. When there are more topics than that, consolidate related ones into one section (example slides join the concept they illustrate) instead of adding sections. A summary the student can read in one sitting beats one that covers every subtopic.
+- Each section has 2 to 4 bullet points; a list section has one per item, however many that is. Each bullet is one crisp revision note under 25 words: a definition, a distinction, a key property, a formula, a step, a result. Not paragraphs, and not a reworded copy of every line on the slide.
 - Lists: when the slides give a list of items (the seven characteristics, the three layers), keep it in one section with one bullet per item and every item present. If the heading states or implies a count ("Seven Characteristics", "The three phases"), the item bullets match that count exactly. Never fold one item's description into another item's bullet.
 - Summary and recap slides that restate earlier slides add no new bullets.
 - Wrap the key term of a bullet in **double asterisks** when there is a clear one (at most one per bullet). Use no other formatting.
@@ -113,6 +114,8 @@ export function summaryUserPrompt(opts: Range & {
   fileName: string;
   part: number;
   parts: number;
+  /** How many sections this part should have. */
+  sections: number;
   slides: string;
 }): string {
   const scope =
@@ -121,6 +124,8 @@ export function summaryUserPrompt(opts: Range & {
       : `This is part ${opts.part} of ${opts.parts}: pages ${opts.first}-${opts.last} of a ${opts.pageCount}-page unit. The other parts are summarized separately, so summarize only these pages. If the first pages here continue a topic from earlier pages, start with that topic's heading.`;
   return `File: ${opts.fileName}
 ${scope}
+
+Write about ${opts.sections} sections, no more${opts.parts === 1 ? "" : " (this part's share of the whole summary)"}. Fewer is fine if these pages cover fewer topics.
 
 <slides>
 ${opts.slides}
