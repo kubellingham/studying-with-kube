@@ -124,12 +124,8 @@ export async function generateStudySet({ fileName, pdf, signal, emit }: Generate
   if (failures.length === total) throw failures[0].reason;
 
   const warnings: string[] = [];
-  const skippedPages = pdf.pageCount - pdf.pages.length;
-  if (skippedPages > 0) {
-    warnings.push(
-      `${skippedPages} page${skippedPages === 1 ? " had" : "s had"} no readable text (images or diagrams only) and ${skippedPages === 1 ? "was" : "were"} skipped.`,
-    );
-  }
+  const unreadable = unreadablePagesWarning(pdf);
+  if (unreadable) warnings.push(unreadable);
 
   const cardItems = cardResults.flatMap((r, i) => {
     if (r.status === "fulfilled") return [r.value];
@@ -196,6 +192,36 @@ function onlyFromChunk<F extends { pages: number[] }, M extends { pages: number[
 ) {
   const ours = (item: { pages: number[] }) => item.pages.length === 0 || item.pages.some((p) => p >= chunk.first);
   return { flashcards: items.flashcards.filter(ours), mcqs: items.mcqs.filter(ours) };
+}
+
+/** A page with less text than this is probably just a heading over a diagram or image. */
+const NEAR_EMPTY_CHARS = 40;
+
+/**
+ * Names the pages whose content Kube probably couldn't read: pages with no
+ * text at all, and pages with little more than a heading (often a diagram or
+ * infographic). The first and last pages (title, "thank you") aren't listed.
+ */
+function unreadablePagesWarning(pdf: ExtractedPdf): string | null {
+  const textByPage = new Map(pdf.pages.map((p) => [p.page, p.text.length]));
+  const listed: number[] = [];
+  let empty = 0;
+  for (let page = 1; page <= pdf.pageCount; page++) {
+    const chars = textByPage.get(page) ?? 0;
+    if (chars === 0) empty++;
+    const edge = page === 1 || page === pdf.pageCount;
+    if (chars === 0 || (chars < NEAR_EMPTY_CHARS && !edge)) listed.push(page);
+  }
+  if (listed.length === 0) return null;
+
+  const shown = listed.length > 12 ? [...listed.slice(0, 12).map(String), `${listed.length - 12} more`] : listed.map(String);
+  const pages = shown.length === 1 ? shown[0] : `${shown.slice(0, -1).join(", ")} and ${shown[shown.length - 1]}`;
+  const counted =
+    empty === 0 ? "" : listed.length === 1 ? " (it had no readable text at all)" : ` (${empty} of them had no readable text at all)`;
+  return (
+    `Some pages' key content may be in diagrams or images that Kube can't read. ` +
+    `If your slides are image-heavy, check ${listed.length === 1 ? "page" : "pages"} ${pages} against your slides${counted}.`
+  );
 }
 
 /**
