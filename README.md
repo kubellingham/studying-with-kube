@@ -15,9 +15,9 @@ This build tests one question: is the output good enough to cram from? It has no
 **URL:** https://studying-with-kube.vercel.app
 
 It's the Vercel project `studying-with-kube` in the "kubellingham's projects" team, linked to this GitHub repo.
-- **The short URL above** serves the deployment marked **Production**. For now that's the first build of the `v1.1-deploy-share` branch. Once the PRs are merged, every push to `main` updates it.
+- **The short URL above** serves the deployment marked **Production**. Right now that's the `v1.2-provider-and-review` branch (deployed as Production on Oct 11). Once the PRs are merged, every push to `main` updates it.
 - **Every other push** gets its own preview deployment at a stable per-branch URL. Previews use the same password and share the same stored sets.
-- **To test v1.2 before the PRs are merged,** use its branch URL, https://studying-with-kube-git-v12-provid-7fcfed-kubellinghams-projects.vercel.app. The short URL still runs the v1.1 build, which doesn't know about AI/ML API or Copy for review. To put v1.2 on the short URL instead: **Deployments →** newest `v1.2-provider-and-review` deployment **→ ⋯ → Promote**.
+- **⚠️ "Redeploy" rebuilds the same commit.** Redeploying the Production deployment picks up new environment variables, but it does **not** pull newer code from another branch. To put a newer branch on the short URL before merging, use **⋯ → Promote** on that branch's newest deployment, or ask Claude to deploy the branch as Production.
 
 ### The access password
 
