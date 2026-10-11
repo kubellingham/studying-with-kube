@@ -138,7 +138,7 @@ export default function Flashcards({ cards, marks, index, onIndex, onMarks }: Pr
   });
 
   if (cards.length === 0) {
-    return <p className="text-muted">No flashcards were generated for this PDF.</p>;
+    return <p className="text-muted">No flashcards were generated for these slides.</p>;
   }
 
   return (

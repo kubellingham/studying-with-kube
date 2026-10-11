@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type DragEvent } from "react";
+import { SLIDES_ACCEPT } from "@/lib/readSlides";
 import { Button } from "./ui";
 
 export type GenerationState =
@@ -59,11 +60,11 @@ function DropZone({ onFile, replacing, onClose }: { onFile: (f: File) => void; r
         dragging ? "border-accent bg-accent-soft" : "border-line bg-surface"
       }`}
     >
-      <p className="text-base font-medium">Drop your slides PDF here</p>
-      <p className="mt-1 text-sm text-muted">One unit at a time · text-based PDF (not scanned) · up to 100 pages, 20 MB</p>
+      <p className="text-base font-medium">Drop your slides here</p>
+      <p className="mt-1 text-sm text-muted">One unit at a time · PDF or PowerPoint (.pptx) with real text, not scans · up to 100 pages</p>
       <div className="mt-5 flex items-center justify-center gap-2">
         <Button variant="primary" onClick={() => inputRef.current?.click()}>
-          Choose PDF
+          Choose file
         </Button>
         {onClose && (
           <Button variant="ghost" onClick={onClose}>
@@ -77,7 +78,7 @@ function DropZone({ onFile, replacing, onClose }: { onFile: (f: File) => void; r
       <input
         ref={inputRef}
         type="file"
-        accept="application/pdf,.pdf"
+        accept={SLIDES_ACCEPT}
         className="hidden"
         onChange={(e) => {
           const file = e.target.files?.[0];

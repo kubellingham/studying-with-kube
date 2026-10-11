@@ -8,7 +8,7 @@ export interface Flashcard {
   topic: string;
   front: string;
   back: string;
-  /** 1-based PDF page numbers the card is based on. */
+  /** 1-based page (or slide) numbers the card is based on. */
   pages: number[];
 }
 
@@ -53,7 +53,7 @@ export interface StudySet {
   shareId?: string;
 }
 
-/** Body of POST /api/generate: the raw text of each PDF page, read in the browser. */
+/** Body of POST /api/generate: the raw text of each PDF page or PowerPoint slide, read in the browser. */
 export interface GenerateRequest {
   fileName: string;
   pages: string[];

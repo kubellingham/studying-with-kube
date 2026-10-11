@@ -2,7 +2,7 @@
 // quality bar, this is the first file to change.
 
 const INPUT_NOTE = `## Input
-You get the text of lecture slides, extracted from a PDF. Each page starts with a marker like [[PAGE 12]]. The extraction is plain text: bullets may be broken across lines, headings may run into body text, and diagrams, images and tables may be missing or garbled.`;
+You get the text of lecture slides, extracted from a PDF or PowerPoint file. Each page starts with a marker like [[PAGE 12]]. The extraction is plain text: bullets may be broken across lines, headings may run into body text, and diagrams, images and tables may be missing or garbled.`;
 
 const GROUNDING = `## Rule 1: Only what the slides say
 Everything you state as true must be stated in, or directly follow from, these pages.

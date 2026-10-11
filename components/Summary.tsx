@@ -3,7 +3,7 @@ import { PageRef, RichText } from "./ui";
 
 export default function Summary({ title, sections }: { title: string; sections: SummarySection[] }) {
   if (sections.length === 0) {
-    return <p className="text-muted">No summary was generated for this PDF.</p>;
+    return <p className="text-muted">No summary was generated for these slides.</p>;
   }
 
   return (

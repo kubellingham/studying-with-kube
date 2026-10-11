@@ -48,7 +48,7 @@ export default function Quiz({ mcqs, answers, index, onChange }: Props) {
   });
 
   if (mcqs.length === 0) {
-    return <p className="text-muted">No quiz questions were generated for this PDF.</p>;
+    return <p className="text-muted">No quiz questions were generated for these slides.</p>;
   }
 
   const answeredCount = mcqs.filter((m) => answers[m.id] !== undefined).length;

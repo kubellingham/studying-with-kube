@@ -10,12 +10,12 @@ import type { GenerateEvent, GenerateRequest } from "@/lib/types";
 // Generation is ~30s of parallel model calls; give it headroom.
 export const maxDuration = 120;
 
-// POST JSON { fileName, pages: string[] }: the raw text of each PDF page,
-// extracted in the browser (lib/readPdf.ts). Validation errors come back as
+// POST JSON { fileName, pages: string[] }: the raw text of each PDF page or
+// PowerPoint slide, extracted in the browser (lib/readSlides.ts). Validation errors come back as
 // JSON with a 4xx/5xx status. Once generation starts, the response is a
 // stream of newline-delimited GenerateEvent JSON.
 //
-// Privacy: the PDF never reaches the server, and its text only lives in this
+// Privacy: the slides file never reaches the server, and its text only lives in this
 // request's memory; it is never written anywhere or logged. What is stored
 // (when sharing is configured) is the generated study set, for its share link.
 export async function POST(req: NextRequest) {
@@ -31,19 +31,19 @@ export async function POST(req: NextRequest) {
     if (raw.length > LIMITS.maxBodyBytes) return tooMuchText();
     body = JSON.parse(raw);
   } catch {
-    return fail(400, "Expected the text of a PDF.");
+    return fail(400, "Expected the text of a slides file.");
   }
   const pages = Array.isArray(body?.pages) ? body.pages : null;
   if (!pages || pages.length === 0 || !pages.every((p) => typeof p === "string")) {
-    return fail(400, "Expected the text of a PDF.");
+    return fail(400, "Expected the text of a slides file.");
   }
 
   if (pages.length > LIMITS.maxPages) {
-    return fail(413, `This PDF has ${pages.length} pages. v1 handles one unit at a time, up to ${LIMITS.maxPages} pages. Split it and upload one part.`);
+    return fail(413, `This file has ${pages.length} pages. Kube handles one unit at a time, up to ${LIMITS.maxPages} pages. Split it and upload one part.`);
   }
   const pdf = cleanSlides(pages);
   if (pdf.totalChars < LIMITS.minChars) {
-    return fail(422, "This PDF has (almost) no selectable text. It looks scanned or image-only, and v1 can only read text-based PDFs.");
+    return fail(422, "This file has (almost) no selectable text. It looks scanned or image-only, and Kube can only read slides that contain real text.");
   }
   if (pdf.totalChars > LIMITS.maxChars) return tooMuchText();
 
@@ -109,7 +109,7 @@ function fail(status: number, message: string) {
 }
 
 function tooMuchText() {
-  return fail(413, "This PDF has more text than one unit of slides usually does. Split it and upload one part.");
+  return fail(413, "This file has more text than one unit of slides usually does. Split it and upload one part.");
 }
 
 function userMessage(err: unknown): string {

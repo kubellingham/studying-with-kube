@@ -2,7 +2,7 @@
 
 import { useCallback, useRef, useState } from "react";
 import { cleanSlides, type SlidePage } from "@/lib/pdf";
-import { readPdfText } from "@/lib/readPdf";
+import { checkSlidesFile, readSlidesText } from "@/lib/readSlides";
 import {
   clearAll,
   emptyProgress,
@@ -18,8 +18,6 @@ import type { GenerateEvent, GenerateRequest, StudySet } from "@/lib/types";
 import StudyView from "./StudyView";
 import { Brand, Button } from "./ui";
 import Uploader, { type GenerationState } from "./Uploader";
-
-const MAX_UPLOAD_MB = 20;
 
 export default function KubeApp() {
   // Rendered client-only (see ClientApp), so localStorage is available here.
@@ -48,12 +46,9 @@ export default function KubeApp() {
   }, []);
 
   const generate = useCallback(async (file: File) => {
-    if (!/\.pdf$/i.test(file.name) && file.type !== "application/pdf") {
-      setGen({ status: "error", message: "That isn't a PDF. v1 only reads PDF lecture slides." });
-      return;
-    }
-    if (file.size > MAX_UPLOAD_MB * 1024 * 1024) {
-      setGen({ status: "error", message: `That file is over ${MAX_UPLOAD_MB} MB. Upload one unit of slides at a time.` });
+    const problem = checkSlidesFile(file);
+    if (problem) {
+      setGen({ status: "error", message: problem });
       return;
     }
 
@@ -63,8 +58,8 @@ export default function KubeApp() {
     setGen({ status: "working", fileName: file.name, message: "Reading your slides…", done: 0, total: 0, startedAt });
 
     try {
-      // Only the text leaves the device, not the PDF (see lib/readPdf.ts).
-      const pages = await readPdfText(file);
+      // Only the text leaves the device, not the file (see lib/readSlides.ts).
+      const pages = await readSlidesText(file);
       if (controller.signal.aborted) throw new Error("Cancelled.");
       setGen((g) => (g.status === "working" ? { ...g, message: "Sending the text to the AI…" } : g));
       const request: GenerateRequest = { fileName: file.name, pages };
@@ -145,7 +140,7 @@ export default function KubeApp() {
         <Brand />
         <h1 className="mt-10 text-3xl font-semibold tracking-tight sm:text-4xl">Upload a unit of lecture slides</h1>
         <p className="mt-3 text-muted">
-          You&apos;ll get flashcards, a practice quiz and a short summary, built only from what&apos;s in the PDF.
+          You&apos;ll get flashcards, a practice quiz and a short summary, built only from what&apos;s in your slides (PDF or PowerPoint).
         </p>
         <div className="mt-8">{uploader}</div>
       </main>
@@ -158,7 +153,7 @@ export default function KubeApp() {
         <Brand />
         <div className="flex gap-2">
           <Button onClick={() => setShowUploader((v) => !v)} disabled={gen.status === "working"}>
-            New PDF
+            New upload
           </Button>
           <Button variant="ghost" onClick={reset} disabled={gen.status === "working"}>
             Reset
@@ -174,7 +169,7 @@ export default function KubeApp() {
         onProgress={updateProgress}
         notices={storageWarning ? ["This browser wouldn't save the set, so it will be gone if you close the tab."] : []}
         slides={slides}
-        missingSlidesNote="This browser doesn't have the slide text for this set (it was made before Copy for review existed). Upload the PDF again to include it."
+        missingSlidesNote="This browser doesn't have the slide text for this set (it was made before Copy for review existed). Upload the slides again to include it."
       />
     </main>
   );

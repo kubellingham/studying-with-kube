@@ -148,7 +148,7 @@ export async function generateStudySet({ fileName, pdf, signal, emit }: Generate
   const summary = mergeSections(summaryItems.flatMap((r) => r.sections));
 
   if (flashcards.length === 0 && mcqs.length === 0 && summary.length === 0) {
-    throw new Error("The model returned nothing usable for this PDF. Try again, or try a different file.");
+    throw new Error("The model returned nothing usable for these slides. Try again, or try a different file.");
   }
 
   logRun(fileName, pdf, flashcards, mcqs, summary.length, usages, `${provider.id}:${model}`);
@@ -157,7 +157,7 @@ export async function generateStudySet({ fileName, pdf, signal, emit }: Generate
     version: STUDY_SET_VERSION,
     id: randomUUID(),
     createdAt: new Date().toISOString(),
-    title: summaryItems.find((s) => s.title)?.title || fileName.replace(/\.pdf$/i, ""),
+    title: summaryItems.find((s) => s.title)?.title || fileName.replace(/\.(pdf|pptx)$/i, ""),
     source: { fileName, pageCount: pdf.pageCount, textPages: pdf.pages.length },
     model,
     provider: provider.id,

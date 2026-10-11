@@ -1,5 +1,5 @@
 export interface SlidePage {
-  /** 1-based page number in the PDF. */
+  /** 1-based page number in the PDF (or slide number in the PowerPoint). */
   page: number;
   text: string;
 }

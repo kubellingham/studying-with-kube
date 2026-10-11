@@ -57,7 +57,7 @@ export function PageRef({ pages, asRange }: { pages: number[]; asRange?: boolean
   const label = pageLabel(pages, asRange);
   if (!label) return null;
   return (
-    <span className="whitespace-nowrap rounded-full bg-surface-2 px-2 py-0.5 text-xs text-muted" title="Page in your PDF">
+    <span className="whitespace-nowrap rounded-full bg-surface-2 px-2 py-0.5 text-xs text-muted" title="Page or slide number in your file">
       {label}
     </span>
   );

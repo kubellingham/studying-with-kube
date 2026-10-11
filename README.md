@@ -1,12 +1,12 @@
 # StudyingKube (test build)
 
-Upload one PDF of lecture slides. About 30 seconds later you get three things to cram from:
+Upload one unit of lecture slides as a PDF or PowerPoint (.pptx). About 30 seconds later you get three things to cram from:
 
 - **Flashcards.** One fact per card. Flip them, mark each one "know it" or "don't know", then go back over the ones you didn't know.
 - **Quiz.** Multiple-choice questions, one at a time. After each answer you see the right one and a one-line reason.
 - **Summary.** A short revision summary organized by the slides' own topics.
 
-Every item shows the PDF page it came from, so you can check it against your slides. Each set also gets a **share link** (`/s/<id>`) that opens the same set on any device, and a **Copy for review** button that copies the whole set plus the slide text for checking in a chat.
+Every item shows the page (or slide) it came from, so you can check it against your slides. Each set also gets a **share link** (`/s/<id>`) that opens the same set on any device, and a **Copy for review** button that copies the whole set plus the slide text for checking in a chat.
 
 This build tests one question: is the output good enough to cram from? It has no accounts and no database. One shared access password protects the deployed site. See `DECISIONS.md` for the technical choices and `LATER.md` for ideas that were deliberately left out.
 
@@ -69,7 +69,7 @@ cp .env.example .env.local     # then fill in KUBE_PROVIDER and that provider's 
 npm run dev
 ```
 
-Open http://localhost:3000 and upload a PDF.
+Open http://localhost:3000 and upload a PDF or .pptx.
 
 Locally:
 - **No password.** The password check only switches on when `KUBE_ACCESS_PASSWORD` is set. Leave it unset in `.env.local`.
@@ -123,10 +123,11 @@ A 70-page unit is typically 30–60 KB. Paste it into the strategy chat and ask 
 
 ## What it accepts
 
-- PDF only, with selectable text. Scanned or image-only PDFs are rejected with a message.
-- Up to 100 pages and 20 MB, which covers one unit of slides.
-- Pages that are only images or diagrams are skipped, and the app tells you how many were skipped.
-- The PDF is read in your browser, and only its text is sent to the server. The file itself never leaves your device.
+- **File types:** a PDF with selectable text, or a PowerPoint `.pptx`. Scanned or image-only files are rejected with a message. Old `.ppt` files aren't supported; save them as `.pptx` or PDF.
+- **Size:** up to 100 pages or slides, and 20 MB for a PDF or 100 MB for a `.pptx` (a `.pptx` carries its images, but only its text is ever read).
+- **PowerPoint specifics:** hidden slides are left out, like PowerPoint's own "Save as PDF". Speaker notes aren't read.
+- **Diagrams and images aren't read.** The app names the pages to check: those with no text, and those with little more than a heading.
+- **Privacy:** the file is read in your browser, and only its text is sent to the server. The file itself never leaves your device.
 
 ## Where things are
 
@@ -134,7 +135,7 @@ A 70-page unit is typically 30–60 KB. Paste it into the strategy chat and ask 
 | --- | --- |
 | `lib/prompts.ts` | The prompts and JSON shapes. Start here if the output quality is off. |
 | `lib/generate.ts` | Splits the slides into chunks, calls the model in parallel, and assembles the set. |
-| `lib/readPdf.ts` | Reads the PDF's text in the browser. |
+| `lib/readSlides.ts` | Picks the in-browser reader for the upload: `readPdf.ts` (PDF, via pdf.js) or `readPptx.ts` (PowerPoint, unzips only the slide XML). |
 | `lib/pdf.ts` | Header/footer cleanup of that text (on the server; the browser runs the same function for Copy for review). |
 | `lib/model.ts` | Model calls with retries and fallbacks; picks the provider from `KUBE_PROVIDER`. |
 | `lib/providers/` | What differs per provider: `openrouter.ts`, `aimlapi.ts`. |
