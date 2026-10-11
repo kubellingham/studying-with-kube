@@ -169,15 +169,19 @@ export async function generateStudySet({ fileName, pdf, signal, emit }: Generate
 }
 
 /**
- * How many items the whole unit should get. Scales with the amount of text,
- * with a per-page floor so sparse slide decks still get decent coverage.
- * A 70-page deck lands at roughly 40-80 flashcards and 15-25 MCQs.
+ * How many items the whole unit should get. Flashcards scale with the amount
+ * of text, with a per-page floor so sparse slide decks still get decent
+ * coverage. MCQs are about a third of that, but at least 12 once a deck has
+ * 10 pages of text: the model tends to land at or a little under the target,
+ * and a short unit still needs a real quiz. A 33-page deck gets about 20
+ * flashcards and 12 MCQs; a 70-page deck roughly 40-80 and 14-27.
  */
 function itemTargets(pdf: ExtractedPdf) {
   const pages = pdf.pages.length;
+  const flashcards = clamp(Math.round(Math.max(pdf.totalChars / 650, pages * 0.6)), 8, 90);
   return {
-    flashcards: clamp(Math.round(Math.max(pdf.totalChars / 650, pages * 0.6)), 8, 90),
-    mcqs: clamp(Math.round(Math.max(pdf.totalChars / 2000, pages * 0.22)), 4, 30),
+    flashcards,
+    mcqs: clamp(Math.round(flashcards / 3), pages >= 10 ? 12 : 4, 30),
   };
 }
 
