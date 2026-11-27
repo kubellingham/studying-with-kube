@@ -8,8 +8,8 @@ export const metadata: Metadata = {
   robots: { index: false },
 };
 
-// A study set opened from its share link. proxy.ts has already checked the
-// access password before this runs.
+// A study set opened from its share link. Open to everyone, signed in or not
+// (see PUBLIC_PATHS in proxy.ts).
 export default async function SharedSetPage({ params }: PageProps<"/s/[id]">) {
   const { id } = await params;
   const set = await loadSharedSet(id);

@@ -15,6 +15,7 @@ import {
   type Progress,
 } from "@/lib/storage";
 import type { GenerateEvent, GenerateRequest, StudySet } from "@/lib/types";
+import AccountMenu from "./AccountMenu";
 import StudyView from "./StudyView";
 import { Brand, Button } from "./ui";
 import Uploader, { type GenerationState } from "./Uploader";
@@ -137,7 +138,10 @@ export default function KubeApp() {
   if (!set || !progress) {
     return (
       <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col px-4 py-10 sm:py-16">
-        <Brand />
+        <header className="flex items-center justify-between gap-3">
+          <Brand />
+          <AccountMenu />
+        </header>
         <h1 className="mt-10 text-3xl font-semibold tracking-tight sm:text-4xl">Upload a unit of lecture slides</h1>
         <p className="mt-3 text-muted">
           You&apos;ll get flashcards, a practice quiz and a short summary, built only from what&apos;s in your slides (PDF or PowerPoint).
@@ -158,6 +162,7 @@ export default function KubeApp() {
           <Button variant="ghost" onClick={reset} disabled={gen.status === "working"}>
             Reset
           </Button>
+          <AccountMenu />
         </div>
       </header>
 

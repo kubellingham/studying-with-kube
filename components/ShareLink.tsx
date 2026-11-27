@@ -43,7 +43,7 @@ export default function ShareLink({ shareId }: { shareId: string }) {
             </Button>
           </div>
           <p className="mt-2 text-xs text-muted">
-            Opens this exact set on any device, after the access password. Progress stays on each device.
+            Opens this exact set on any device, without signing in. Progress stays on each device.
           </p>
         </div>
       )}

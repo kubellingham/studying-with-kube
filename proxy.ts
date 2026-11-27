@@ -1,30 +1,46 @@
+import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
-import { ACCESS_COOKIE, accessPassword, hasValidAccessCookie } from "@/lib/access";
+import { ACCOUNTS_MISSING_MESSAGE, accountsState, supabaseConfig } from "@/lib/supabase/config";
 
-// Shared-password gate in front of every page and API route.
-// - KUBE_ACCESS_PASSWORD unset (local dev): does nothing.
-// - Pages without a valid cookie are answered with the /unlock page instead,
-//   at the same URL. Nothing about the requested page or set is sent, and
-//   after unlocking the browser just reloads the URL it was on.
-// - API calls without a valid cookie get a 401.
+// Google sign-in in front of every page and API route (replaces v1.3's shared
+// password). On each request this also refreshes the Supabase session, so the
+// cookies Server Components and route handlers read are current.
+// - Signed out: pages redirect to /signin (and come back after), API calls get a 401.
+// - Open to everyone: the sign-in pages, share links (/s/<id>) and the keep-alive.
+// - Supabase not configured: local dev runs open; on Vercel nothing is served.
+
+const PUBLIC_PATHS = [/^\/signin$/, /^\/auth\//, /^\/s\/[^/]+$/, /^\/api\/keepalive$/];
+
 export async function proxy(request: NextRequest) {
-  const password = accessPassword();
-  if (!password) return NextResponse.next();
+  const state = accountsState();
+  if (state === "off") return NextResponse.next();
+  if (state === "missing") return new NextResponse(ACCOUNTS_MISSING_MESSAGE, { status: 503 });
 
-  const { pathname } = request.nextUrl;
-  if (pathname === "/unlock" || pathname === "/api/unlock" || pathname === "/api/keepalive") return NextResponse.next();
+  const cfg = supabaseConfig()!;
+  let response = NextResponse.next({ request });
+  const supabase = createServerClient(cfg.url, cfg.key, {
+    cookies: {
+      getAll: () => request.cookies.getAll(),
+      setAll: (list) => {
+        for (const { name, value } of list) request.cookies.set(name, value);
+        response = NextResponse.next({ request });
+        for (const { name, value, options } of list) response.cookies.set(name, value, options);
+      },
+    },
+  });
 
-  if (await hasValidAccessCookie(request.cookies.get(ACCESS_COOKIE)?.value, password)) {
-    return NextResponse.next();
-  }
+  // Verifies the session token (refreshing it if it's about to expire).
+  const { data } = await supabase.auth.getClaims();
+  const { pathname, search } = request.nextUrl;
+  if (data?.claims?.sub || PUBLIC_PATHS.some((path) => path.test(pathname))) return response;
 
   if (pathname.startsWith("/api/")) {
-    return NextResponse.json({ error: "Enter the access password first: reload the page." }, { status: 401 });
+    return NextResponse.json({ error: "You're signed out. Reload the page and sign in again." }, { status: 401 });
   }
-
-  const response = NextResponse.rewrite(new URL("/unlock", request.url));
-  response.headers.set("Cache-Control", "private, no-store");
-  return response;
+  const signin = request.nextUrl.clone();
+  signin.pathname = "/signin";
+  signin.search = pathname === "/" ? "" : `?next=${encodeURIComponent(pathname + search)}`;
+  return NextResponse.redirect(signin);
 }
 
 export const config = {
