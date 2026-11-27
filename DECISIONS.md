@@ -609,3 +609,51 @@ A narrow release before testers arrive. Each fix comes from repeated observation
 - **Known limitation:** PowerPoint decks are often more visual than PDFs (pictures, charts, screenshots of diagrams), and none of that is readable. Fix C's warning applies even more strongly. This is noted in LATER.md as a reason to prioritise vision in a future tier.
 - **Copy:** the uploader, app and API messages that said "PDF" now say "slides" / "PDF or PowerPoint". The header button "New PDF" is now "New upload".
 
+## v1.4: accounts and caps (steps 1–3 of 7)
+
+Prince's v1.4 scope: Google sign-in only (no allowlist), per-account caps as the abuse protection, three modes (Middle free; Panic 1/month free; Panic and Comprehensive paid), payments marked by hand, Supabase with a daily keep-alive. Steps 1–3 cover accounts, caps and share links; the modes come in steps 4–6.
+
+### Supabase, one project, no secret key in the app
+- **One project** (`studying-with-kube`, Mumbai, `ap-south-1`) serves previews and production. The free plan allows two active projects per account, and one is taken by another project, so a separate dev project isn't possible without pausing something else. Row-level security keeps users apart; test accounts are deleted before production.
+- **No secret key in the app.** The app only has the project URL and the publishable key, both public by design. Everything a user mustn't do directly goes through security-definer functions that check `auth.uid()`:
+  - taking a generation slot (`reserve_generation`);
+  - counting it (`complete_generation`);
+  - refunding it (`fail_generation`);
+  - reading a share link (`get_shared_set`).
+  No select policy exists on `shared_sets`, so share links can't be listed.
+- **Considered:** the service-role (secret) key on the server, the usual pattern. Rejected because it adds a secret to Vercel, bypasses every policy if leaked, and isn't needed: the refund/count rules can be enforced in SQL.
+  - "Done wins": `complete_generation` overrides `fail_generation`, so calling `fail_generation` yourself can't make a finished set free.
+  - `fail_generation` only applies to rows still reserved.
+  - A reservation abandoned by a crash stops counting after 15 minutes.
+
+### Caps in the database
+- **Free:** Middle 5 per day; Panic 1 per calendar month; Comprehensive none.
+- **Paid:** 30 Middle, 10 Panic and 10 Comprehensive per day.
+- **Calendar:** days and months are Indian time (`Asia/Kolkata`). Daily caps reset at midnight IST, and the free Panic on the 1st.
+- **Paid accounts:** `profiles.plan = 'paid'` (optionally with `paid_until`), set by Prince in the Supabase table editor. Users can't update their own profile.
+- **Concurrency:** one generation at a time per account (an advisory lock plus a 3-minute "busy" check), so two tabs can't both take the last slot.
+- **Site-wide brake:** `KUBE_LIMIT_PER_DAY` (default 500) is passed in by the server and caps all accounts together. The old per-IP in-memory limits now only apply to local dev without accounts.
+- **Tested:** `npm run test:db` runs the migration on PGlite (Postgres in WebAssembly) with Supabase's auth stubbed, plus 33 checks covering caps, IST windows, refunds, isolation between users, anonymous access and share links.
+
+### Sign-in
+- **Supabase Auth with Google, cookie sessions via `@supabase/ssr`.**
+  - `proxy.ts` refreshes and verifies the session (`getClaims`) on each request.
+  - Signed-out pages redirect to `/signin?next=…` (same-site paths only), and APIs answer 401.
+  - Open to everyone: `/signin`, `/auth/*`, `/s/<id>`, `/api/keepalive`.
+- **The shared password gate (`KUBE_ACCESS_PASSWORD`) is removed.**
+- **Fail closed:** without the Supabase variables, local dev runs open as before; a Vercel deployment refuses to serve rather than run without caps.
+
+### Share links moved from Vercel Blob to Supabase
+- **Why:** the Blob store was suspended (found while verifying the v1.3.1 merge), which broke every share link in production. Prince chose to move them into Supabase.
+- **Now:** sets are saved by the signed-in user who generated them and opened by anyone with the 20-character link, without signing in. `@vercel/blob` is removed.
+- **Old links:** links created before v1.4 lived in the suspended store and can't be recovered.
+
+### Keep-alive
+A daily Vercel cron (`vercel.json`, 03:17 UTC) calls `/api/keepalive`, which runs one tiny query. A free Supabase project pauses after a week without activity; this keeps it awake. Vercel only runs crons on production deployments, so it starts with the v1.4 release.
+
+### How steps 1–3 were tested
+- **Database:** the 33 PGlite checks above.
+- **The app end to end, locally:** against a fake Supabase (Auth's user endpoint and the RPC calls, backed by PGlite running the real migration), plus a mock model. 26 checks: signed-out redirects and 401s, a bad sign-in callback, `/api/me`, the usage line in the uploader, five uploads then the refusal message, the "used up" state, a refund when the model is down, marking an account paid, the Paid badge, share links in a signed-out browser, sign-out clearing the session, and the phone header fitting.
+- **Accounts off:** local dev mode still generates and shares.
+- **Not tested yet:** real Google sign-in and the real Supabase project. Both need Prince's setup.
+
