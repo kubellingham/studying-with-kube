@@ -12,7 +12,7 @@ export async function proxy(request: NextRequest) {
   if (!password) return NextResponse.next();
 
   const { pathname } = request.nextUrl;
-  if (pathname === "/unlock" || pathname === "/api/unlock") return NextResponse.next();
+  if (pathname === "/unlock" || pathname === "/api/unlock" || pathname === "/api/keepalive") return NextResponse.next();
 
   if (await hasValidAccessCookie(request.cookies.get(ACCESS_COOKIE)?.value, password)) {
     return NextResponse.next();
