@@ -28,7 +28,13 @@ interface GenerateArgs {
   emit: (event: GenerateEvent) => void;
 }
 
-export async function generateStudySet({ fileName, pdf, signal, emit }: GenerateArgs): Promise<StudySet> {
+/** The set, and what the model calls cost (0 when the provider doesn't report cost). */
+export interface GeneratedSet {
+  set: StudySet;
+  costUsd: number;
+}
+
+export async function generateStudySet({ fileName, pdf, signal, emit }: GenerateArgs): Promise<GeneratedSet> {
   const provider = activeProvider();
   const { model } = provider.settings();
   const allowedPages = new Set(pdf.pages.map((p) => p.page));
@@ -151,9 +157,10 @@ export async function generateStudySet({ fileName, pdf, signal, emit }: Generate
     throw new Error("The model returned nothing usable for these slides. Try again, or try a different file.");
   }
 
-  logRun(fileName, pdf, flashcards, mcqs, summary.length, usages, `${provider.id}:${model}`);
+  const costUsd = usages.reduce((n, u) => n + (u.cost ?? 0), 0);
+  logRun(fileName, pdf, flashcards, mcqs, summary.length, costUsd, `${provider.id}:${model}`);
 
-  return {
+  const set: StudySet = {
     version: STUDY_SET_VERSION,
     id: randomUUID(),
     createdAt: new Date().toISOString(),
@@ -166,6 +173,7 @@ export async function generateStudySet({ fileName, pdf, signal, emit }: Generate
     mcqs,
     warnings,
   };
+  return { set, costUsd };
 }
 
 /**
@@ -248,13 +256,12 @@ function logRun(
   flashcards: StudySet["flashcards"],
   mcqs: StudySet["mcqs"],
   sections: number,
-  usages: ModelUsage[],
+  cost: number,
   modelName: string,
 ) {
   const words = (s: string) => s.split(/\s+/).filter(Boolean).length;
   const longFronts = flashcards.filter((c) => words(c.front) > 15).length;
   const longBacks = flashcards.filter((c) => words(c.back) > 30).length;
-  const cost = usages.reduce((n, u) => n + (u.cost ?? 0), 0);
   console.log(
     `[kube] "${fileName}": ${pdf.pageCount} pages (${pdf.totalChars} chars) -> ` +
       `${flashcards.length} flashcards (${longFronts} long fronts, ${longBacks} long backs), ` +

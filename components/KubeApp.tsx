@@ -15,6 +15,7 @@ import {
   type Progress,
 } from "@/lib/storage";
 import type { GenerateEvent, GenerateRequest, StudySet } from "@/lib/types";
+import { refreshMe } from "@/lib/useMe";
 import AccountMenu from "./AccountMenu";
 import StudyView from "./StudyView";
 import { Brand, Button } from "./ui";
@@ -108,6 +109,7 @@ export default function KubeApp() {
       }
     } finally {
       abortRef.current = null;
+      void refreshMe(); // the usage line counts this upload (or not, if it failed)
     }
   }, []);
 
@@ -156,8 +158,9 @@ export default function KubeApp() {
       <header className="flex items-center justify-between gap-3">
         <Brand />
         <div className="flex gap-2">
-          <Button onClick={() => setShowUploader((v) => !v)} disabled={gen.status === "working"}>
-            New upload
+          <Button className="whitespace-nowrap" onClick={() => setShowUploader((v) => !v)} disabled={gen.status === "working"}>
+            <span className="sm:hidden">Upload</span>
+            <span className="hidden sm:inline">New upload</span>
           </Button>
           <Button variant="ghost" onClick={reset} disabled={gen.status === "working"}>
             Reset

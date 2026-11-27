@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type DragEvent } from "react";
 import { SLIDES_ACCEPT } from "@/lib/readSlides";
+import { useMe } from "@/lib/useMe";
 import { Button } from "./ui";
 
 export type GenerationState =
@@ -72,6 +73,7 @@ function DropZone({ onFile, replacing, onClose }: { onFile: (f: File) => void; r
           </Button>
         )}
       </div>
+      <UsageLine />
       {replacing && (
         <p className="mt-4 text-xs text-muted">The new set replaces the current one once it&apos;s ready.</p>
       )}
@@ -87,6 +89,20 @@ function DropZone({ onFile, replacing, onClose }: { onFile: (f: File) => void; r
         }}
       />
     </div>
+  );
+}
+
+/** "4 of 5 free sets left today", from the signed-in account's caps. */
+function UsageLine() {
+  const quota = useMe()?.usage?.middle;
+  if (!quota) return null;
+  const kind = quota.plan === "free" ? "free sets" : "sets";
+  return (
+    <p className={`mt-4 text-xs ${quota.left === 0 ? "text-bad" : "text-muted"}`}>
+      {quota.left === 0
+        ? `You've used today's ${quota.limit} ${kind}. More at midnight (India time).`
+        : `${quota.left} of ${quota.limit} ${kind} left today`}
+    </p>
   );
 }
 

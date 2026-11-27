@@ -25,7 +25,8 @@ function intFromEnv(name: string, fallback: number): number {
 export function serverConfig() {
   return {
     limitPerIpPerHour: intFromEnv("KUBE_LIMIT_PER_IP_PER_HOUR", 10),
-    limitPerDay: intFromEnv("KUBE_LIMIT_PER_DAY", 50),
+    /** All users together, per day: a brake on spend (~$0.01 per set). Per-account caps live in Supabase. */
+    limitPerDay: intFromEnv("KUBE_LIMIT_PER_DAY", 500),
     maxConcurrent: intFromEnv("KUBE_MAX_CONCURRENT", 3),
   };
 }
